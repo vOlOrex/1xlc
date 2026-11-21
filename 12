@@ -244,15 +244,50 @@ local tbl10 = {}
 local tbl11 = {}
 local flag3 = false
 
--- نظام معاينة الفاكهة القادمة فوق نافذة البائع
+-- نظام معاينة الفاكهة القادمة فوق رأس بائع الفواكه في العالم (3D BillboardGui) مباشرة
+local currentDealerBillboard = nil
+local dealerWatchLoop = nil
+
 local function clearFruitPreview()
+	if currentDealerBillboard then
+		pcall(function() currentDealerBillboard:Destroy() end)
+		currentDealerBillboard = nil
+	end
+	local oldScreen = playerGui:FindFirstChild("X10DealerBillboard")
+	if oldScreen then oldScreen:Destroy() end
 	local zioles = playerGui:FindFirstChild("ZiolesGacha_Window")
 	if zioles then
-		local existing = zioles:FindFirstChild("X10FruitPreview")
+		local existing = zioles:FindFirstChild("X10FruitPreview", true)
 		if existing then existing:Destroy() end
 	end
-	local globalExisting = playerGui:FindFirstChild("X10FruitPreviewScreen")
-	if globalExisting then globalExisting:Destroy() end
+end
+
+local function findFruitDealerHead()
+	local dealerNames = {
+		["Blox Fruit Gacha"] = true,
+		["Zioles"] = true,
+		["Blox Fruit Dealer Cousin"] = true,
+		["Gacha"] = true,
+	}
+
+	local npcsFolder = workspace:FindFirstChild("NPCs")
+	if npcsFolder then
+		for _, npc in ipairs(npcsFolder:GetChildren()) do
+			if dealerNames[npc.Name] or npc.Name:lower():find("gacha") or npc.Name:lower():find("zioles") then
+				local head = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
+				if head then return head end
+			end
+		end
+	end
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Model") and (dealerNames[obj.Name] or obj.Name:lower():find("gacha") or obj.Name:lower():find("zioles")) then
+			local head = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+			if head then return head end
+		end
+	end
+
+	return nil
 end
 
 local function pickCandidateFruit(isBoosted)
@@ -265,34 +300,27 @@ local function renderFruitPreview(fruitData)
 	clearFruitPreview()
 	if not tbl2.showFruits or not fruitData then return end
 
-	local zioles = playerGui:FindFirstChild("ZiolesGacha_Window")
-	if not zioles or not zioles.Enabled then return end
+	local dealerHead = findFruitDealerHead()
+	if not dealerHead then return end
 
-	-- البحث عن الإطار الرئيسي لنافذة البائع لوضع البطاقة فوقه مباشرة
-	local targetContainer = zioles:FindFirstChildWhichIsA("Frame", true)
-	for _, child in ipairs(zioles:GetChildren()) do
-		if child:IsA("Frame") and child.Visible and child.AbsoluteSize.Y > 100 then
-			targetContainer = child
-			break
-		end
-	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "X10DealerBillboard"
+	billboard.Adornee = dealerHead
+	billboard.Size = UDim2.new(0, 230, 0, 74)
+	billboard.StudsOffset = Vector3.new(0, 4.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 250
+	billboard.ResetOnSpawn = false
+	billboard.Parent = playerGui
+	currentDealerBillboard = billboard
 
 	local previewCard = Instance.new("Frame")
 	previewCard.Name = "X10FruitPreview"
-	previewCard.Size = UDim2.new(0, 230, 0, 74)
+	previewCard.Size = UDim2.fromScale(1, 1)
 	previewCard.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+	previewCard.BackgroundTransparency = 0.08
 	previewCard.BorderSizePixel = 0
-	previewCard.ZIndex = 500
-
-	if targetContainer then
-		previewCard.AnchorPoint = Vector2.new(0.5, 1)
-		previewCard.Position = UDim2.new(0.5, 0, 0, -10)
-		previewCard.Parent = targetContainer
-	else
-		previewCard.AnchorPoint = Vector2.new(0.5, 0)
-		previewCard.Position = UDim2.new(0.5, 0, 0.08, 0)
-		previewCard.Parent = zioles
-	end
+	previewCard.Parent = billboard
 
 	Instance.new("UICorner", previewCard).CornerRadius = UDim.new(0, 10)
 	local stroke = Instance.new("UIStroke", previewCard)
@@ -305,7 +333,6 @@ local function renderFruitPreview(fruitData)
 	iconHolder.Position = UDim2.new(0, 9, 0.5, -28)
 	iconHolder.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
 	iconHolder.BorderSizePixel = 0
-	iconHolder.ZIndex = 501
 	iconHolder.Parent = previewCard
 	Instance.new("UICorner", iconHolder).CornerRadius = UDim.new(0, 8)
 
@@ -314,7 +341,6 @@ local function renderFruitPreview(fruitData)
 	iconImg.Position = UDim2.new(0, 3, 0, 3)
 	iconImg.BackgroundTransparency = 1
 	iconImg.ScaleType = Enum.ScaleType.Fit
-	iconImg.ZIndex = 502
 	iconImg.Parent = iconHolder
 
 	local sprite = fn14(fruitData.DisplayName)
@@ -338,7 +364,6 @@ local function renderFruitPreview(fruitData)
 	tagLabel.Font = Enum.Font.GothamBold
 	tagLabel.TextSize = 10
 	tagLabel.TextXAlignment = Enum.TextXAlignment.Left
-	tagLabel.ZIndex = 501
 	tagLabel.Parent = previewCard
 
 	local nameLabel = Instance.new("TextLabel")
@@ -351,7 +376,6 @@ local function renderFruitPreview(fruitData)
 	nameLabel.TextSize = 15
 	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.ZIndex = 501
 	nameLabel.Parent = previewCard
 
 	local rarityLabel = Instance.new("TextLabel")
@@ -363,8 +387,23 @@ local function renderFruitPreview(fruitData)
 	rarityLabel.Font = Enum.Font.GothamSemibold
 	rarityLabel.TextSize = 12
 	rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
-	rarityLabel.ZIndex = 501
 	rarityLabel.Parent = previewCard
+end
+
+local function startDealerWatchLoop()
+	if dealerWatchLoop then return end
+	dealerWatchLoop = task.spawn(function()
+		while tbl2.showFruits do
+			if not nextSelectedFruit then
+				nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
+			end
+			if not currentDealerBillboard or not currentDealerBillboard.Parent or not currentDealerBillboard.Adornee or not currentDealerBillboard.Adornee.Parent then
+				renderFruitPreview(nextSelectedFruit)
+			end
+			task.wait(1)
+		end
+		dealerWatchLoop = nil
+	end)
 end
 
 local function getPrimeTool(fruitName)
@@ -565,8 +604,12 @@ end
 
 local function fn19(arg, arg2)
 	local v6 = nextSelectedFruit or pickCandidateFruit(arg)
-	nextSelectedFruit = nil
-	clearFruitPreview()
+	nextSelectedFruit = pickCandidateFruit(arg)
+	if tbl2.showFruits then
+		renderFruitPreview(nextSelectedFruit)
+	else
+		clearFruitPreview()
+	end
 
 	task.spawn(function()
 		-- التعديل الجديد: سيبنا اللفة تبدأ فوراً في الخلفية
@@ -744,7 +787,6 @@ local function fn28(parent)
 		task.delay(0.5, function()
 			flag4 = false
 			textButton:Destroy()
-			clearFruitPreview()
 			pcall(function() GachaWindow:Close() end)
 			task.delay(0.5, function()
 				local ok3, result3 = pcall(function() return GachaWindow:IsOpen() end)
@@ -780,10 +822,11 @@ GachaWindow.Open = function(arg, arg2, arg3, ...)
 	if arg2 == "ZiolesGacha" then
 		fn27()
 		flag4 = false
-		clearFruitPreview()
-		nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
+		if not nextSelectedFruit then
+			nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
+		end
 
-		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime or tbl2.showFruits then
+		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime then
 			n2 = type(arg3) == "table" and tonumber(arg3.Value) or 0
 			flag4 = true
 			text = tbl2.bypassCash and "FREE" or nil
@@ -804,9 +847,6 @@ GachaWindow.Open = function(arg, arg2, arg3, ...)
 				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow then
 					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do fn29(descendant) end
-					if tbl2.showFruits and not ziolesGachaWindow:FindFirstChild("X10FruitPreview", true) then
-						renderFruitPreview(nextSelectedFruit)
-					end
 				end
 			end)
 		end
@@ -824,6 +864,8 @@ local x10LuckyUI = playerGui:FindFirstChild("X10LuckyUI")
 if x10LuckyUI then x10LuckyUI:Destroy() end
 local x10LoadingUI = playerGui:FindFirstChild("X10LoadingUI")
 if x10LoadingUI then x10LoadingUI:Destroy() end
+local oldBillboard = playerGui:FindFirstChild("X10DealerBillboard")
+if oldBillboard then oldBillboard:Destroy() end
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "X10LuckyUI"
@@ -947,6 +989,7 @@ for _, v5 in ipairs(tbl15) do
 					nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
 				end
 				renderFruitPreview(nextSelectedFruit)
+				startDealerWatchLoop()
 			else
 				clearFruitPreview()
 			end
