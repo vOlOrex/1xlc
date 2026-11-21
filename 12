@@ -90,7 +90,8 @@ local function fn12()
 	return result3 or {}
 end
 
-local tbl2 = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false }
+local tbl2 = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false, showFruits = false }
+local nextSelectedFruit = nil
 
 local function fn13()
 	return HttpService:GenerateGUID(false)
@@ -242,6 +243,129 @@ replicatedFruits.Parent = playerGui
 local tbl10 = {}
 local tbl11 = {}
 local flag3 = false
+
+-- نظام معاينة الفاكهة القادمة فوق نافذة البائع
+local function clearFruitPreview()
+	local zioles = playerGui:FindFirstChild("ZiolesGacha_Window")
+	if zioles then
+		local existing = zioles:FindFirstChild("X10FruitPreview")
+		if existing then existing:Destroy() end
+	end
+	local globalExisting = playerGui:FindFirstChild("X10FruitPreviewScreen")
+	if globalExisting then globalExisting:Destroy() end
+end
+
+local function pickCandidateFruit(isBoosted)
+	local pool = (isBoosted and #tbl9 > 0) and tbl9 or tbl8
+	if #pool == 0 then pool = tbl6 end
+	return pool[math.random(1, #pool)]
+end
+
+local function renderFruitPreview(fruitData)
+	clearFruitPreview()
+	if not tbl2.showFruits or not fruitData then return end
+
+	local zioles = playerGui:FindFirstChild("ZiolesGacha_Window")
+	if not zioles or not zioles.Enabled then return end
+
+	-- البحث عن الإطار الرئيسي لنافذة البائع لوضع البطاقة فوقه مباشرة
+	local targetContainer = zioles:FindFirstChildWhichIsA("Frame", true)
+	for _, child in ipairs(zioles:GetChildren()) do
+		if child:IsA("Frame") and child.Visible and child.AbsoluteSize.Y > 100 then
+			targetContainer = child
+			break
+		end
+	end
+
+	local previewCard = Instance.new("Frame")
+	previewCard.Name = "X10FruitPreview"
+	previewCard.Size = UDim2.new(0, 230, 0, 74)
+	previewCard.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+	previewCard.BorderSizePixel = 0
+	previewCard.ZIndex = 500
+
+	if targetContainer then
+		previewCard.AnchorPoint = Vector2.new(0.5, 1)
+		previewCard.Position = UDim2.new(0.5, 0, 0, -10)
+		previewCard.Parent = targetContainer
+	else
+		previewCard.AnchorPoint = Vector2.new(0.5, 0)
+		previewCard.Position = UDim2.new(0.5, 0, 0.08, 0)
+		previewCard.Parent = zioles
+	end
+
+	Instance.new("UICorner", previewCard).CornerRadius = UDim.new(0, 10)
+	local stroke = Instance.new("UIStroke", previewCard)
+	stroke.Color = (fruitData.Rarity and fruitData.Rarity.Color) or Color3.fromRGB(255, 215, 80)
+	stroke.Thickness = 2
+
+	-- حاوية صورة الفاكهة
+	local iconHolder = Instance.new("Frame")
+	iconHolder.Size = UDim2.new(0, 56, 0, 56)
+	iconHolder.Position = UDim2.new(0, 9, 0.5, -28)
+	iconHolder.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
+	iconHolder.BorderSizePixel = 0
+	iconHolder.ZIndex = 501
+	iconHolder.Parent = previewCard
+	Instance.new("UICorner", iconHolder).CornerRadius = UDim.new(0, 8)
+
+	local iconImg = Instance.new("ImageLabel")
+	iconImg.Size = UDim2.new(1, -6, 1, -6)
+	iconImg.Position = UDim2.new(0, 3, 0, 3)
+	iconImg.BackgroundTransparency = 1
+	iconImg.ScaleType = Enum.ScaleType.Fit
+	iconImg.ZIndex = 502
+	iconImg.Parent = iconHolder
+
+	local sprite = fn14(fruitData.DisplayName)
+	if sprite and sprite.Image then
+		iconImg.Image = sprite.Image
+		iconImg.ImageRectOffset = sprite.ImageRectOffset or Vector2.new(0, 0)
+		iconImg.ImageRectSize = sprite.ImageRectSize or Vector2.new(0, 0)
+	elseif fruitData.Image then
+		iconImg.Image = fruitData.Image
+		iconImg.ImageRectOffset = fruitData.ImageRectOffset or Vector2.new(0, 0)
+		iconImg.ImageRectSize = fruitData.ImageRectSize or Vector2.new(0, 0)
+	end
+
+	-- النصوص (العنوان + اسم الفاكهة + الندرة)
+	local tagLabel = Instance.new("TextLabel")
+	tagLabel.Size = UDim2.new(1, -78, 0, 16)
+	tagLabel.Position = UDim2.new(0, 72, 0, 8)
+	tagLabel.BackgroundTransparency = 1
+	tagLabel.Text = "NEXT DEALER FRUIT"
+	tagLabel.TextColor3 = Color3.fromRGB(160, 165, 185)
+	tagLabel.Font = Enum.Font.GothamBold
+	tagLabel.TextSize = 10
+	tagLabel.TextXAlignment = Enum.TextXAlignment.Left
+	tagLabel.ZIndex = 501
+	tagLabel.Parent = previewCard
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -78, 0, 22)
+	nameLabel.Position = UDim2.new(0, 72, 0, 25)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = fruitData.DisplayName .. " Fruit"
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextSize = 15
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.ZIndex = 501
+	nameLabel.Parent = previewCard
+
+	local rarityLabel = Instance.new("TextLabel")
+	rarityLabel.Size = UDim2.new(1, -78, 0, 16)
+	rarityLabel.Position = UDim2.new(0, 72, 0, 48)
+	rarityLabel.BackgroundTransparency = 1
+	rarityLabel.Text = (fruitData.Rarity and fruitData.Rarity.Name) or "Common"
+	rarityLabel.TextColor3 = (fruitData.Rarity and fruitData.Rarity.Color) or Color3.fromRGB(200, 200, 200)
+	rarityLabel.Font = Enum.Font.GothamSemibold
+	rarityLabel.TextSize = 12
+	rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
+	rarityLabel.ZIndex = 501
+	rarityLabel.Parent = previewCard
+end
 
 local function getPrimeTool(fruitName)
 	local candidates = { fruitName .. " Fruit", fruitName }
@@ -440,8 +564,9 @@ local function fn18(arg)
 end
 
 local function fn19(arg, arg2)
-	local v5 = arg and tbl9 or tbl8
-	local v6 = v5[math.random(1, #v5)]
+	local v6 = nextSelectedFruit or pickCandidateFruit(arg)
+	nextSelectedFruit = nil
+	clearFruitPreview()
 
 	task.spawn(function()
 		-- التعديل الجديد: سيبنا اللفة تبدأ فوراً في الخلفية
@@ -619,6 +744,7 @@ local function fn28(parent)
 		task.delay(0.5, function()
 			flag4 = false
 			textButton:Destroy()
+			clearFruitPreview()
 			pcall(function() GachaWindow:Close() end)
 			task.delay(0.5, function()
 				local ok3, result3 = pcall(function() return GachaWindow:IsOpen() end)
@@ -654,7 +780,10 @@ GachaWindow.Open = function(arg, arg2, arg3, ...)
 	if arg2 == "ZiolesGacha" then
 		fn27()
 		flag4 = false
-		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime then
+		clearFruitPreview()
+		nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
+
+		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime or tbl2.showFruits then
 			n2 = type(arg3) == "table" and tonumber(arg3.Value) or 0
 			flag4 = true
 			text = tbl2.bypassCash and "FREE" or nil
@@ -675,6 +804,9 @@ GachaWindow.Open = function(arg, arg2, arg3, ...)
 				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow then
 					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do fn29(descendant) end
+					if tbl2.showFruits and not ziolesGachaWindow:FindFirstChild("X10FruitPreview", true) then
+						renderFruitPreview(nextSelectedFruit)
+					end
 				end
 			end)
 		end
@@ -701,8 +833,8 @@ screenGui.IgnoreGuiInset = true
 screenGui.Enabled = false
 screenGui.Parent = playerGui
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 230, 0, 240)
-frame.Position = UDim2.new(0, 10, 0.5, -120)
+frame.Size = UDim2.new(0, 230, 0, 286)
+frame.Position = UDim2.new(0, 10, 0.5, -143)
 frame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
@@ -750,8 +882,9 @@ local tbl16 = { key = "boostLuck", label = "🍀 Boost Luck", color = Color3.fro
 local tbl17 = { key = "bypassTime", label = "⏰ Bypass Waiting Time", color = Color3.fromRGB(80, 160, 255) }
 local tbl18 = { key = "bypassCash", label = "💰 Bypass Cash", color = Color3.fromRGB(255, 200, 50) }
 local tbl19_real = { key = "realMode", label = "🎁 inv fruits Mode", color = Color3.fromRGB(255, 100, 100) }
+local tbl20_show = { key = "showFruits", label = "👀 Show Fruits", color = Color3.fromRGB(180, 110, 255) }
 
-tbl15[1] = tbl16; tbl15[2] = tbl17; tbl15[3] = tbl18; tbl15[4] = tbl19_real
+tbl15[1] = tbl16; tbl15[2] = tbl17; tbl15[3] = tbl18; tbl15[4] = tbl19_real; tbl15[5] = tbl20_show
 
 local frame3 = Instance.new("Frame")
 frame3.Size = UDim2.new(1, -20, 1, -48)
@@ -802,6 +935,22 @@ for _, v5 in ipairs(tbl15) do
 			Position = arg and UDim2.new(1, -23, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
 			BackgroundColor3 = arg and Color3.new(1, 1, 1) or Color3.fromRGB(160, 160, 160),
 		}):Play()
+
+		if v5.key == "boostLuck" then
+			nextSelectedFruit = pickCandidateFruit(arg)
+			if tbl2.showFruits then
+				renderFruitPreview(nextSelectedFruit)
+			end
+		elseif v5.key == "showFruits" then
+			if arg then
+				if not nextSelectedFruit then
+					nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
+				end
+				renderFruitPreview(nextSelectedFruit)
+			else
+				clearFruitPreview()
+			end
+		end
 	end
 
 	textButton.Activated:Connect(function() fn30(not tbl2[v5.key]) end)
