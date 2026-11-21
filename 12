@@ -1,20 +1,79 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
-local DialogueController = require(ReplicatedStorage.DialogueController)
-local GachaWindow = require(ReplicatedStorage.Controllers.UI.GachaWindow)
-local commF = ReplicatedStorage.Remotes.CommF_
-local open = GachaWindow.Open
-local TextUtil = require(ReplicatedStorage.Modules.Util.TextUtil)
-local localPlayer = game:GetService("Players").LocalPlayer
+--[[
+    Fruit Spin Predictor  •  Blox Fruits UI  (Merged Edition)
+    ------------------------------------------------------------------
+    RightControl hides / shows the window.
+]]
 
-local function fn12()
+------------------------------------------------------------------------
+-- CONFIG
+------------------------------------------------------------------------
+local CONFIG = {
+	PredictionURL      = "",
+	AutoRefreshSeconds = 30,
+	ScanDuration       = 0.8,
+	SpinAnimation      = true,
+	RequestTimeout     = 10,
+	BrandName          = "FRUIT SPIN",
+	BrandTag           = "PREDICTOR",
+	Version            = "v2.5",
+	ToggleKey          = Enum.KeyCode.RightControl,
+}
+
+local FRUIT_ICONS = {}
+
+local FRUITS = {
+	Common    = {"Rocket","Spin","Blade","Spring","Bomb","Smoke","Spike"},
+	Uncommon  = {"Flame","Ice","Sand","Dark","Eagle","Diamond"},
+	Rare      = {"Light","Rubber","Ghost","Magma"},
+	Legendary = {"Quake","Buddha","Love","Creation","Spider","Sound","Phoenix","Portal",
+	             "Lightning","Pain","Blizzard"},
+	Mythical  = {"Gravity","Mammoth","T-Rex","Dough","Shadow","Venom","Gas","Spirit",
+	             "Tiger","Yeti","Kitsune","Control","Dragon","Dragon (East)","Dragon (West)"},
+}
+local ALIASES = { Chop = "Blade", Falcon = "Eagle", Barrier = "Creation", Rumble = "Lightning", Leopard = "Tiger" }
+
+------------------------------------------------------------------------
+-- SERVICES & GAME MODULES
+------------------------------------------------------------------------
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local Players            = game:GetService("Players")
+local TweenService       = game:GetService("TweenService")
+local RunService         = game:GetService("RunService")
+local UIS                = game:GetService("UserInputService")
+local HttpService        = game:GetService("HttpService")
+local LocalPlayer        = Players.LocalPlayer
+local playerGui          = LocalPlayer:WaitForChild("PlayerGui")
+
+local DialogueController = require(ReplicatedStorage.DialogueController)
+local GachaWindow        = require(ReplicatedStorage.Controllers.UI.GachaWindow)
+local commF              = ReplicatedStorage.Remotes.CommF_
+local origGachaOpen      = GachaWindow.Open
+local TextUtil           = require(ReplicatedStorage.Modules.Util.TextUtil)
+local ItemId             = require(ReplicatedStorage.Economy.ItemId)
+local ItemConfig         = require(ReplicatedStorage.ItemConfig)
+
+local ENV = (typeof(getgenv) == "function" and getgenv()) or _G
+if ENV.__FruitSpinPredictorDestroy then pcall(ENV.__FruitSpinPredictorDestroy) end
+
+local FRUIT_LOOKUP, REEL_LIST = {}, {}
+for _, rarity in ipairs({ "Common", "Uncommon", "Rare", "Legendary", "Mythical" }) do
+	for _, name in ipairs(FRUITS[rarity]) do
+		FRUIT_LOOKUP[name:lower()] = { name = name, rarity = rarity }
+		table.insert(REEL_LIST, { name = name, rarity = rarity })
+	end
+end
+for old, cur in pairs(ALIASES) do FRUIT_LOOKUP[old:lower()] = FRUIT_LOOKUP[cur:lower()] end
+
+------------------------------------------------------------------------
+-- GACHA & INVENTORY LOGIC (FROM X100 LUCKY)
+------------------------------------------------------------------------
+local gachaFlags = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false }
+local nextSelectedFruit = nil
+
+local function getInventory()
 	local ok3, result3 = pcall(function()
 		local ItemReplicationService = require(ReplicatedStorage.ItemReplicationService)
 		local KEYS = require(ReplicatedStorage.ItemReplicationService.KEYS)
-		local ItemConfig = require(ReplicatedStorage.ItemConfig)
 		local items = ItemReplicationService:GetItems(KEYS.IS_OWNED)
 		local items2 = ItemReplicationService:GetItems(KEYS.QUANTITY)
 		local items3 = ItemReplicationService:GetItems(KEYS.PREFERRED_MUTATION)
@@ -29,7 +88,6 @@ local function fn12()
 		end
 
 		local tbl3 = {}
-
 		if type(items3) == "table" then
 			for _, v2 in pairs(items3) do
 				if v2.ItemId and v2.Value and v2.Value ~= "" then
@@ -39,39 +97,35 @@ local function fn12()
 		end
 
 		local tbl4 = {}
-
 		if type(items) == "table" then
 			for _, item in pairs(items) do
 				if item.Value == true and item.ItemId then
-					local ok3, result3 = pcall(function()
+					local ok4, res4 = pcall(function()
 						return ItemConfig.tryGet(item.ItemId)
 					end)
 
-					if ok3 and type(result3) == "table" and result3.Display and result3.Display.Category == "Blox Fruit" then
-						local storageKey = result3.Index and result3.Index.StorageKey
-						local name = result3.Display.Name
+					if ok4 and type(res4) == "table" and res4.Display and res4.Display.Category == "Blox Fruit" then
+						local storageKey = res4.Index and res4.Index.StorageKey
+						local name = res4.Display.Name
 						storageKey = name and name ~= "" and name or storageKey or ""
-						local idType = result3.Index and result3.Index.IdType
+						local idType = res4.Index and res4.Index.IdType
 						local str3
 
 						if idType == "PhysicalMoveset" then
 							str3 = tbl3[item.ItemId] and "Mutated Fruit" or "Blox Fruit"
-						else
-							str3 = nil
-							if idType == "Redeemable" then
-								str3 = "Premium"
-							end
+						elseif idType == "Redeemable" then
+							str3 = "Premium"
 						end
 
 						if str3 then
 							table.insert(tbl4, {
 								ItemId = item.ItemId,
 								Id = item.ItemId,
-								Name = result3.Index and result3.Index.StorageKey or storageKey,
+								Name = res4.Index and res4.Index.StorageKey or storageKey,
 								DisplayName = storageKey,
 								Type = str3,
-								Rarity = result3.Quality and result3.Quality.RarityValue or 0,
-								Value = result3.Quality and result3.Quality.MoneyPrice or 0,
+								Rarity = res4.Quality and res4.Quality.RarityValue or 0,
+								Value = res4.Quality and res4.Quality.MoneyPrice or 0,
 								Count = tbl2[item.ItemId] or 1,
 							})
 						end
@@ -83,34 +137,24 @@ local function fn12()
 		return tbl4
 	end)
 
-	if not ok3 then
-		warn("[BF Spinner] getInventory failed:", result3)
-		return {}
-	end
+	if not ok3 then return {} end
 	return result3 or {}
 end
 
-local tbl2 = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false, showFruits = false }
-local nextSelectedFruit = nil
-
-local function fn13()
+local function genUID()
 	return HttpService:GenerateGUID(false)
 end
 
-local tbl3 = { [0] = "Common", "Uncommon", "Rare", "Legendary", "Mythical" }
-
-local tbl4 = {
+local RARITY_NAMES = { [0] = "Common", "Uncommon", "Rare", "Legendary", "Mythical" }
+local RARITY_COLORS = {
 	[0] = Color3.fromRGB(179, 179, 179),
 	Color3.fromRGB(92, 140, 211),
 	Color3.fromRGB(140, 82, 255),
 	Color3.fromRGB(213, 43, 228),
-	(Color3.fromRGB(255, 50, 50)),
+	Color3.fromRGB(255, 50, 50),
 }
 
-local ItemId = require(ReplicatedStorage.Economy.ItemId)
-local ItemConfig = require(ReplicatedStorage.ItemConfig)
-
-local function fn14(arg)
+local function getFruitSprite(arg)
 	local str3 = arg .. "-" .. arg
 	local ok3, result3 = pcall(function()
 		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
@@ -126,7 +170,7 @@ local function fn14(arg)
 	return nil
 end
 
-local function fn15(arg)
+local function getFruitItemId(arg)
 	local str3 = arg .. "-" .. arg
 	local ok3, result3 = pcall(function()
 		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
@@ -135,11 +179,11 @@ local function fn15(arg)
 	return type(result3) == "table" and (result3.ItemId or result3.Id) or result3
 end
 
-local tbl5 = {}
+local spriteMap = {}
 
-local function fn16(arg, arg2)
+local function registerFruit(arg, arg2)
 	local str3 = arg .. "-" .. arg
-	local v2 = fn14(arg)
+	local v2 = getFruitSprite(arg)
 	local image, imageRectOffset, imageRectSize
 
 	if v2 then
@@ -152,73 +196,67 @@ local function fn16(arg, arg2)
 		image = nil
 	end
 
-	tbl5[str3] = arg
+	spriteMap[str3] = arg
 
 	return {
 		StorageName = str3,
 		DisplayName = arg,
 		ImageName = str3,
-		ItemId = fn15(arg),
+		ItemId = getFruitItemId(arg),
 		Image = image,
 		ImageRectOffset = imageRectOffset,
 		ImageRectSize = imageRectSize,
-		Rarity = { Name = tbl3[arg2], Value = arg2, Color = tbl4[arg2] },
+		Rarity = { Name = RARITY_NAMES[arg2], Value = arg2, Color = RARITY_COLORS[arg2] },
 		Attributes = {},
 		Filter = nil,
 		ItemType = "Item",
 		Awards = nil,
-		_UID = fn13(),
+		_UID = genUID(),
 	}
 end
 
-local tbl6 = {}
-local Spin = fn16("Spin", 0)
-local Smoke = fn16("Smoke", 0)
-local Blade = fn16("Blade", 0)
-local Bomb = fn16("Bomb", 0)
-local Spike = fn16("Spike", 0)
-local Rocket = fn16("Rocket", 0)
-local Sand = fn16("Sand", 1)
-local Ice = fn16("Ice", 1)
-local Flame = fn16("Flame", 1)
-local Dark = fn16("Dark", 1)
-local Eagle = fn16("Eagle", 1)
-local Light = fn16("Light", 2)
-local Rubber = fn16("Rubber", 2)
-local Magma = fn16("Magma", 2)
-local Buddha = fn16("Buddha", 3)
-local Portal = fn16("Portal", 3)
-local Lightning = fn16("Lightning", 3)
-local Pain = fn16("Pain", 3)
-local Shadow = fn16("Shadow", 4)
-local Control = fn16("Control", 4)
-local Tiger = fn16("Tiger", 4)
-local Gravity = fn16("Gravity", 4)
-local v2 = fn16("Dragon (East)", 4)
-local Gas = fn16("Gas", 4)
-local Kitsune = fn16("Kitsune", 4)
-local Dough = fn16("Dough", 4)
-local Yeti = fn16("Yeti", 4)
-local v3 = fn16("Dragon (West)", 4)
-local v4 = fn16("T-Rex", 4)
-local Mammoth = fn16("Mammoth", 4)
-local Spirit = fn16("Spirit", 4)
-local Venom = fn16("Venom", 4)
-tbl6[1] = Spin; tbl6[2] = Smoke; tbl6[3] = Blade; tbl6[4] = Bomb; tbl6[5] = Spike
-tbl6[6] = Rocket; tbl6[7] = Sand; tbl6[8] = Ice; tbl6[9] = Flame; tbl6[10] = Dark
-tbl6[11] = Eagle; tbl6[12] = Light; tbl6[13] = Rubber; tbl6[14] = Magma; tbl6[15] = Buddha
-tbl6[16] = Portal; tbl6[17] = Lightning; tbl6[18] = Pain; tbl6[19] = Shadow; tbl6[20] = Control
-tbl6[21] = Tiger; tbl6[22] = Gravity; tbl6[23] = v2; tbl6[24] = Gas; tbl6[25] = Kitsune
-tbl6[26] = Dough; tbl6[27] = Yeti; tbl6[28] = v3; tbl6[29] = v4; tbl6[30] = Mammoth
-tbl6[31] = Spirit; tbl6[32] = Venom
+local allFruitsList = {
+	registerFruit("Spin", 0),
+	registerFruit("Smoke", 0),
+	registerFruit("Blade", 0),
+	registerFruit("Bomb", 0),
+	registerFruit("Spike", 0),
+	registerFruit("Rocket", 0),
+	registerFruit("Sand", 1),
+	registerFruit("Ice", 1),
+	registerFruit("Flame", 1),
+	registerFruit("Dark", 1),
+	registerFruit("Eagle", 1),
+	registerFruit("Light", 2),
+	registerFruit("Rubber", 2),
+	registerFruit("Magma", 2),
+	registerFruit("Buddha", 3),
+	registerFruit("Portal", 3),
+	registerFruit("Lightning", 3),
+	registerFruit("Pain", 3),
+	registerFruit("Shadow", 4),
+	registerFruit("Control", 4),
+	registerFruit("Tiger", 4),
+	registerFruit("Gravity", 4),
+	registerFruit("Dragon (East)", 4),
+	registerFruit("Gas", 4),
+	registerFruit("Kitsune", 4),
+	registerFruit("Dough", 4),
+	registerFruit("Yeti", 4),
+	registerFruit("Dragon (West)", 4),
+	registerFruit("T-Rex", 4),
+	registerFruit("Mammoth", 4),
+	registerFruit("Spirit", 4),
+	registerFruit("Venom", 4),
+}
 
 pcall(function()
 	local SpinnerUtil = require(ReplicatedStorage.Controllers.UI.Spinner.SpinnerUtil)
 	local applyImage = SpinnerUtil.applyImage
 	SpinnerUtil.applyImage = function(arg, arg2, arg3, arg4, arg5)
-		local v5 = tbl5[arg2]
+		local v5 = spriteMap[arg2]
 		if v5 then
-			local v6 = fn14(v5)
+			local v6 = getFruitSprite(v5)
 			if v6 then
 				arg.Image = v6.Image
 				arg.ImageRectOffset = v6.ImageRectOffset or Vector2.new(0, 0)
@@ -230,180 +268,23 @@ pcall(function()
 	end
 end)
 
-local tbl7 = {}
-local tbl8 = {}
-for _, v5 in pairs(tbl6) do
-	if v5.Rarity.Value == 4 then table.insert(tbl7, v5) else table.insert(tbl8, v5) end
+local mythicalFruits = {}
+local normalFruits = {}
+for _, v5 in pairs(allFruitsList) do
+	if v5.Rarity.Value == 4 then table.insert(mythicalFruits, v5) else table.insert(normalFruits, v5) end
 end
 
-local tbl9 = {}
+local ownedMythPool = {}
 local replicatedFruits = playerGui:FindFirstChild("__ReplicatedFruits") or Instance.new("Folder")
 replicatedFruits.Name = "__ReplicatedFruits"
 replicatedFruits.Parent = playerGui
-local tbl10 = {}
-local tbl11 = {}
-local flag3 = false
-
--- نظام معاينة الفاكهة القادمة فوق رأس بائع الفواكه في العالم (3D BillboardGui) مباشرة
-local currentDealerBillboard = nil
-local dealerWatchLoop = nil
-
-local function clearFruitPreview()
-	if currentDealerBillboard then
-		pcall(function() currentDealerBillboard:Destroy() end)
-		currentDealerBillboard = nil
-	end
-	local oldScreen = playerGui:FindFirstChild("X10DealerBillboard")
-	if oldScreen then oldScreen:Destroy() end
-	local zioles = playerGui:FindFirstChild("ZiolesGacha_Window")
-	if zioles then
-		local existing = zioles:FindFirstChild("X10FruitPreview", true)
-		if existing then existing:Destroy() end
-	end
-end
-
-local function findFruitDealerHead()
-	local dealerNames = {
-		["Blox Fruit Gacha"] = true,
-		["Zioles"] = true,
-		["Blox Fruit Dealer Cousin"] = true,
-		["Gacha"] = true,
-	}
-
-	local npcsFolder = workspace:FindFirstChild("NPCs")
-	if npcsFolder then
-		for _, npc in ipairs(npcsFolder:GetChildren()) do
-			if dealerNames[npc.Name] or npc.Name:lower():find("gacha") or npc.Name:lower():find("zioles") then
-				local head = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildWhichIsA("BasePart")
-				if head then return head end
-			end
-		end
-	end
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("Model") and (dealerNames[obj.Name] or obj.Name:lower():find("gacha") or obj.Name:lower():find("zioles")) then
-			local head = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
-			if head then return head end
-		end
-	end
-
-	return nil
-end
+local loadedModelFlags = {}
+local cachedFruitModels = {}
 
 local function pickCandidateFruit(isBoosted)
-	local pool = (isBoosted and #tbl9 > 0) and tbl9 or tbl8
-	if #pool == 0 then pool = tbl6 end
+	local pool = (isBoosted and #ownedMythPool > 0) and ownedMythPool or (isBoosted and mythicalFruits or normalFruits)
+	if #pool == 0 then pool = allFruitsList end
 	return pool[math.random(1, #pool)]
-end
-
-local function renderFruitPreview(fruitData)
-	clearFruitPreview()
-	if not tbl2.showFruits or not fruitData then return end
-
-	local dealerHead = findFruitDealerHead()
-	if not dealerHead then return end
-
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "X10DealerBillboard"
-	billboard.Adornee = dealerHead
-	billboard.Size = UDim2.new(0, 230, 0, 74)
-	billboard.StudsOffset = Vector3.new(0, 4.5, 0)
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 250
-	billboard.ResetOnSpawn = false
-	billboard.Parent = playerGui
-	currentDealerBillboard = billboard
-
-	local previewCard = Instance.new("Frame")
-	previewCard.Name = "X10FruitPreview"
-	previewCard.Size = UDim2.fromScale(1, 1)
-	previewCard.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
-	previewCard.BackgroundTransparency = 0.08
-	previewCard.BorderSizePixel = 0
-	previewCard.Parent = billboard
-
-	Instance.new("UICorner", previewCard).CornerRadius = UDim.new(0, 10)
-	local stroke = Instance.new("UIStroke", previewCard)
-	stroke.Color = (fruitData.Rarity and fruitData.Rarity.Color) or Color3.fromRGB(255, 215, 80)
-	stroke.Thickness = 2
-
-	-- حاوية صورة الفاكهة
-	local iconHolder = Instance.new("Frame")
-	iconHolder.Size = UDim2.new(0, 56, 0, 56)
-	iconHolder.Position = UDim2.new(0, 9, 0.5, -28)
-	iconHolder.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
-	iconHolder.BorderSizePixel = 0
-	iconHolder.Parent = previewCard
-	Instance.new("UICorner", iconHolder).CornerRadius = UDim.new(0, 8)
-
-	local iconImg = Instance.new("ImageLabel")
-	iconImg.Size = UDim2.new(1, -6, 1, -6)
-	iconImg.Position = UDim2.new(0, 3, 0, 3)
-	iconImg.BackgroundTransparency = 1
-	iconImg.ScaleType = Enum.ScaleType.Fit
-	iconImg.Parent = iconHolder
-
-	local sprite = fn14(fruitData.DisplayName)
-	if sprite and sprite.Image then
-		iconImg.Image = sprite.Image
-		iconImg.ImageRectOffset = sprite.ImageRectOffset or Vector2.new(0, 0)
-		iconImg.ImageRectSize = sprite.ImageRectSize or Vector2.new(0, 0)
-	elseif fruitData.Image then
-		iconImg.Image = fruitData.Image
-		iconImg.ImageRectOffset = fruitData.ImageRectOffset or Vector2.new(0, 0)
-		iconImg.ImageRectSize = fruitData.ImageRectSize or Vector2.new(0, 0)
-	end
-
-	-- النصوص (العنوان + اسم الفاكهة + الندرة)
-	local tagLabel = Instance.new("TextLabel")
-	tagLabel.Size = UDim2.new(1, -78, 0, 16)
-	tagLabel.Position = UDim2.new(0, 72, 0, 8)
-	tagLabel.BackgroundTransparency = 1
-	tagLabel.Text = "NEXT DEALER FRUIT"
-	tagLabel.TextColor3 = Color3.fromRGB(160, 165, 185)
-	tagLabel.Font = Enum.Font.GothamBold
-	tagLabel.TextSize = 10
-	tagLabel.TextXAlignment = Enum.TextXAlignment.Left
-	tagLabel.Parent = previewCard
-
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -78, 0, 22)
-	nameLabel.Position = UDim2.new(0, 72, 0, 25)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = fruitData.DisplayName .. " Fruit"
-	nameLabel.TextColor3 = Color3.new(1, 1, 1)
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 15
-	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Parent = previewCard
-
-	local rarityLabel = Instance.new("TextLabel")
-	rarityLabel.Size = UDim2.new(1, -78, 0, 16)
-	rarityLabel.Position = UDim2.new(0, 72, 0, 48)
-	rarityLabel.BackgroundTransparency = 1
-	rarityLabel.Text = (fruitData.Rarity and fruitData.Rarity.Name) or "Common"
-	rarityLabel.TextColor3 = (fruitData.Rarity and fruitData.Rarity.Color) or Color3.fromRGB(200, 200, 200)
-	rarityLabel.Font = Enum.Font.GothamSemibold
-	rarityLabel.TextSize = 12
-	rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
-	rarityLabel.Parent = previewCard
-end
-
-local function startDealerWatchLoop()
-	if dealerWatchLoop then return end
-	dealerWatchLoop = task.spawn(function()
-		while tbl2.showFruits do
-			if not nextSelectedFruit then
-				nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
-			end
-			if not currentDealerBillboard or not currentDealerBillboard.Parent or not currentDealerBillboard.Adornee or not currentDealerBillboard.Adornee.Parent then
-				renderFruitPreview(nextSelectedFruit)
-			end
-			task.wait(1)
-		end
-		dealerWatchLoop = nil
-	end)
 end
 
 local function getPrimeTool(fruitName)
@@ -415,15 +296,15 @@ local function getPrimeTool(fruitName)
 		table.insert(candidates, baseName)
 	end
 	for _, name in ipairs(candidates) do
-		local tool = localPlayer.Backpack:FindFirstChild(name)
+		local tool = LocalPlayer.Backpack:FindFirstChild(name)
 		if tool and tool:IsA("Tool") and not tool:GetAttribute("X10Fake") then return tool end
-		local charTool = localPlayer.Character and localPlayer.Character:FindFirstChild(name)
+		local charTool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name)
 		if charTool and charTool:IsA("Tool") and not charTool:GetAttribute("X10Fake") then return charTool end
 	end
 	return nil
 end
 
-local function fn17(arg, arg2, arg3)
+local function attachFakeFruitActions(arg, arg2, arg3)
 	local str3, str4
 	if arg3 == "Dragon (East)" then
 		str3 = "Dragon-Dragon"; str4 = "East"
@@ -433,13 +314,13 @@ local function fn17(arg, arg2, arg3)
 		str3 = arg2; str4 = nil
 	end
 
-	local function fn18(arg4)
+	local function cleanName(arg4)
 		return (arg4:match("^(.+)%-") or arg4):gsub("_", " ")
 	end
 
-	local function fn19()
+	local function eatFruit()
 		task.spawn(function()
-			local character = localPlayer.Character
+			local character = LocalPlayer.Character
 			local humanoid = character:FindFirstChildWhichIsA("Humanoid")
 			local animator = humanoid:FindFirstChildWhichIsA("Animator")
 			local animation = Instance.new("Animation")
@@ -459,13 +340,12 @@ local function fn17(arg, arg2, arg3)
 			local primeTool = getPrimeTool(str3)
 			local hasPrime = primeTool ~= nil
 			local flag4 = arg.Parent == character and arg or nil
-			
 			if flag4 and flag4:IsA("Tool") then flag4:Destroy() end
 
 			if hasPrime then
 				if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end
 			else
-				local cloneTool = localPlayer.Backpack:FindFirstChild(arg3 .. " Fruit") or localPlayer.Backpack:FindFirstChild(arg.Name)
+				local cloneTool = LocalPlayer.Backpack:FindFirstChild(arg3 .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(arg.Name)
 				if cloneTool and cloneTool:IsA("Tool") then
 					humanoid:EquipTool(cloneTool)
 					task.wait(0.5)
@@ -477,7 +357,7 @@ local function fn17(arg, arg2, arg3)
 		end)
 	end
 
-	local function fn20()
+	local function openDialogue()
 		if DialogueController.Active then return end
 		local v5 = DialogueController.new()
 		v5:setTitle("Blox Fruit")
@@ -487,15 +367,15 @@ local function fn17(arg, arg2, arg3)
 				arg5:setText("Eat")
 				arg5:jumpToPage(function(arg6)
 					local str5 = ""
-					pcall(function() str5 = localPlayer.Data.DevilFruit.Value end)
+					pcall(function() str5 = LocalPlayer.Data.DevilFruit.Value end)
 					if str5 == "" then
-						fn19(); arg6:addText("[Eating Blox Fruit.]"); arg6:advanceAfterDelay(1.5); return
+						eatFruit(); arg6:addText("[Eating Blox Fruit.]"); arg6:advanceAfterDelay(1.5); return
 					end
 					local str6 = "><Color=/> with <Color=Yellow><" .. arg3 .. "><Color=/>. Are you sure?"
-					arg6:addText("This will replace your <Color=Yellow><" .. fn18(str5) .. str6)
+					arg6:addText("This will replace your <Color=Yellow><" .. cleanName(str5) .. str6)
 					arg6:addOptionType("Chat", function(arg7)
 						arg7:setText("Confirm")
-						arg7:jumpToPage(function(arg8) fn19(); arg8:addText("[Eating Blox Fruit.]"); arg8:advanceAfterDelay(1.5) end)
+						arg7:jumpToPage(function(arg8) eatFruit(); arg8:addText("[Eating Blox Fruit.]"); arg8:advanceAfterDelay(1.5) end)
 					end)
 					arg6:addOptionType("Chat", function(arg7)
 						arg7:setText("Cancel")
@@ -508,7 +388,7 @@ local function fn17(arg, arg2, arg3)
 				arg5:jumpToPage(function(arg6)
 					task.spawn(function()
 						task.wait()
-						local character = localPlayer.Character
+						local character = LocalPlayer.Character
 						local humanoid = character:FindFirstChildWhichIsA("Humanoid")
 						local flag4 = arg.Parent == character and arg or nil
 						if not flag4 or not flag4:IsA("Tool") then return end
@@ -522,7 +402,7 @@ local function fn17(arg, arg2, arg3)
 						local v6 = flag4
 						local flag5 = false
 						local connection3 = nil
-						connection3 = game:GetService("RunService").Heartbeat:Connect(function()
+						connection3 = RunService.Heartbeat:Connect(function()
 							if flag5 then return end
 							local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
 							if not humanoidRootPart or not handle or not handle.Parent then connection3:Disconnect(); return end
@@ -530,7 +410,7 @@ local function fn17(arg, arg2, arg3)
 								flag5 = true; connection3:Disconnect(); task.wait(0.1)
 								if handle then handle.CanCollide = false end
 								v6.CanBeDropped = false
-								v6.Parent = localPlayer.Backpack
+								v6.Parent = LocalPlayer.Backpack
 								task.wait()
 								humanoid:EquipTool(v6)
 							end
@@ -558,13 +438,12 @@ local function fn17(arg, arg2, arg3)
 	end
 
 	arg.Activated:Connect(function()
-		local ok3, result3 = pcall(fn20)
-		if not ok3 then warn("[X10Lucky] fruit dialogue failed:", result3) end
+		pcall(openDialogue)
 	end)
 end
 
-local function fn18(arg)
-	local v5 = tbl11[arg.StorageName]
+local function injectPreviewModel(arg)
+	local v5 = cachedFruitModels[arg.StorageName]
 	local fruit = v5 and v5:FindFirstChild("Fruit")
 	local itemId = arg.ItemId
 	if not fruit or not itemId then return end
@@ -602,114 +481,65 @@ local function fn18(arg)
 	end)
 end
 
-local function fn19(arg, arg2)
+local onGachaRollFinished = nil
+
+local function executeGachaRoll(arg, arg2)
 	local v6 = nextSelectedFruit or pickCandidateFruit(arg)
 	nextSelectedFruit = pickCandidateFruit(arg)
-	if tbl2.showFruits then
-		renderFruitPreview(nextSelectedFruit)
-	else
-		clearFruitPreview()
+	if onGachaRollFinished then
+		task.spawn(onGachaRollFinished, nextSelectedFruit)
 	end
 
 	task.spawn(function()
-		-- التعديل الجديد: سيبنا اللفة تبدأ فوراً في الخلفية
-		local ok4, result4 = pcall(function()
-			require(ReplicatedStorage.Controllers.UI.Spinner):Open({ v6 }, tbl6, "ZiolesGacha")
+		pcall(function()
+			require(ReplicatedStorage.Controllers.UI.Spinner):Open({ v6 }, allFruitsList, "ZiolesGacha")
 		end)
-		if not ok4 then warn("[X10Lucky] Spinner:Open failed:", result4) end
 
-		-- وفي نفس الوقت بنجيب الفاكهة الحقيقية في الخلفية
-		if arg and tbl2.realMode then
+		if arg and loadedModelFlags[v6.StorageName] then
 			local storageName = v6.StorageName
-			local primeExists = getPrimeTool(storageName) ~= nil
-			
-			if not primeExists then
-				pcall(function() commF:InvokeServer("LoadFruit", storageName) end)
-				local now = tick()
-				while tick() - now < 2 do
-					primeExists = getPrimeTool(storageName) ~= nil
-					if primeExists then break end
-					task.wait(0.1)
-				end
-			end
-
-			if primeExists then
-				local primeTool = getPrimeTool(storageName)
-				local humanoid = localPlayer.Character and localPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-				
-				if humanoid and primeTool then
-					humanoid:EquipTool(primeTool)
-				end
-				
-				task.wait(1)
-				if humanoid and primeTool then
-					local handle = primeTool:FindFirstChild("Handle")
-					if handle then
-						local cFrame = handle.CFrame
-						humanoid:UnequipTools()
-						task.wait(0.1)
-						primeTool.CanBeDropped = true
-						primeTool.Parent = workspace
-						handle.CFrame = cFrame * CFrame.new(0, 0, -1.5)
-						handle.CanCollide = true
-						
-						task.wait(2)
-						if primeTool.Parent == workspace then
-							primeTool.Parent = localPlayer.Backpack
-						end
+			local v7 = cachedFruitModels[storageName]
+			if v7 then
+				local clone = v7:Clone()
+				clone.Name = v6.DisplayName .. " Fruit"
+				clone:SetAttribute("X10Fake", true)
+				attachFakeFruitActions(clone, storageName, v6.DisplayName)
+				clone.Parent = LocalPlayer.Backpack
+				clone.Equipped:Connect(function()
+					local fruit = clone:FindFirstChild("Fruit")
+					if not fruit then return end
+					local animationController = fruit:FindFirstChildWhichIsA("AnimationController")
+					if not animationController then return end
+					local animator = animationController:FindFirstChildWhichIsA("Animator")
+					local animation = fruit:FindFirstChildWhichIsA("Animation", true)
+					if animator and animation then
+						local v8 = animator:LoadAnimation(animation)
+						v8.Looped = true
+						v8:Play()
 					end
-				end
-			end
-		else
-			-- الوضع العادي (Fake)
-			if arg and tbl10[v6.StorageName] then
-				local storageName = v6.StorageName
-				local v7 = tbl11[storageName]
-				if v7 then
-					local clone = v7:Clone()
-					clone.Name = v6.DisplayName .. " Fruit"
-					clone:SetAttribute("X10Fake", true)
-					fn17(clone, storageName, v6.DisplayName)
-					clone.Parent = localPlayer.Backpack
-					clone.Equipped:Connect(function()
-						local fruit = clone:FindFirstChild("Fruit")
-						if not fruit then return end
-						local animationController = fruit:FindFirstChildWhichIsA("AnimationController")
-						if not animationController then return end
-						local animator = animationController:FindFirstChildWhichIsA("Animator")
-						local animation = fruit:FindFirstChildWhichIsA("Animation", true)
-						if animator and animation then
-							local v8 = animator:LoadAnimation(animation)
-							v8.Looped = true
-							v8:Play()
-						end
-					end)
-				end
+				end)
 			end
 		end
 
-		local ok3, result3 = pcall(fn18, v6)
-		if not ok3 then warn("[X10Lucky] injectPreviewModel failed:", result3) end
-
+		pcall(injectPreviewModel, v6)
 		if arg2 then arg2() end
 	end)
 end
 
-local function fn20(arg)
-	return game.Players.LocalPlayer.Data.Beli.Value >= arg
+local function hasEnoughBeli(arg)
+	return LocalPlayer.Data.Beli.Value >= arg
 end
 
-local n2 = 0
-local flag4 = false
-local text = nil
-local tbl12 = {}
-local tbl13 = { btn = Color3.fromRGB(50, 185, 65), stroke = Color3.fromRGB(27, 112, 36), trans = Color3.fromRGB(76, 214, 90) }
-local tbl14 = {}
+local currentPrice = 0
+local gachaHookActive = false
+local overrideText = nil
+local hookedLabels = {}
+local greenColors = { btn = Color3.fromRGB(50, 185, 65), stroke = Color3.fromRGB(27, 112, 36), trans = Color3.fromRGB(76, 214, 90) }
+local hookedProps = {}
 
-local function fn21() return tbl2.bypassCash or tbl2.bypassTime end
+local function isAnyBypassActive() return gachaFlags.bypassCash or gachaFlags.bypassTime end
 
-local function fn22(arg, arg2, arg3)
-	if tbl14[arg] then return end
+local function lockProp(arg, arg2, arg3)
+	if hookedProps[arg] then return end
 	local tbl15 = { prop = arg2, orig = arg[arg2], want = arg3 }
 	tbl15.conn = arg:GetPropertyChangedSignal(arg2):Connect(function()
 		if arg[arg2] ~= tbl15.want then
@@ -717,57 +547,57 @@ local function fn22(arg, arg2, arg3)
 			arg[arg2] = tbl15.want
 		end
 	end)
-	tbl14[arg] = tbl15
+	hookedProps[arg] = tbl15
 	arg[arg2] = arg3
 end
 
-local function fn23()
-	for k, v5 in pairs(tbl14) do
+local function unlockAllProps()
+	for k, v5 in pairs(hookedProps) do
 		v5.conn:Disconnect()
 		if k.Parent then k[v5.prop] = v5.orig end
 	end
-	tbl14 = {}
+	hookedProps = {}
 end
 
-local function fn24(arg)
-	fn22(arg, "BackgroundColor3", tbl13.btn)
+local function styleGreenButton(arg)
+	lockProp(arg, "BackgroundColor3", greenColors.btn)
 	local uiStroke = arg:FindFirstChildOfClass("UIStroke")
-	if uiStroke then fn22(uiStroke, "Color", tbl13.stroke) end
+	if uiStroke then lockProp(uiStroke, "Color", greenColors.stroke) end
 	local trans = arg:FindFirstChild("Trans")
-	if trans and trans:IsA("Frame") then fn22(trans, "BackgroundColor3", tbl13.trans) end
+	if trans and trans:IsA("Frame") then lockProp(trans, "BackgroundColor3", greenColors.trans) end
 end
 
-local function fn25(arg)
-	if tbl12[arg] then return end
+local function hookButtonText(arg)
+	if hookedLabels[arg] then return end
 	local tbl15 = { orig = arg.Text }
 	tbl15.conn = arg:GetPropertyChangedSignal("Text"):Connect(function()
-		if text then
-			if arg.Text ~= text then tbl15.orig = arg.Text; arg.Text = text end
+		if overrideText then
+			if arg.Text ~= overrideText then tbl15.orig = arg.Text; arg.Text = overrideText end
 		else tbl15.orig = arg.Text end
 	end)
-	tbl12[arg] = tbl15
-	if text then arg.Text = text end
+	hookedLabels[arg] = tbl15
+	if overrideText then arg.Text = overrideText end
 end
 
-local function fn26(text2)
-	text = text2
-	for k, v5 in pairs(tbl12) do if k.Parent then k.Text = text2 or v5.orig end end
+local function setButtonOverrideText(text2)
+	overrideText = text2
+	for k, v5 in pairs(hookedLabels) do if k.Parent then k.Text = text2 or v5.orig end end
 end
 
-local function fn27()
-	text = nil
-	for k, v5 in pairs(tbl12) do
+local function resetGachaHooks()
+	overrideText = nil
+	for k, v5 in pairs(hookedLabels) do
 		v5.conn:Disconnect()
 		if k.Parent then k.Text = v5.orig end
 	end
-	tbl12 = {}
-	fn23()
+	hookedLabels = {}
+	unlockAllProps()
 end
 
-local function fn28(parent)
+local function attachPurchaseOverlay(parent)
 	local fakeOverlay = parent:FindFirstChild("FakeOverlay")
 	if fakeOverlay then fakeOverlay:Destroy() end
-	local flag5 = false
+	local clicked = false
 	local textButton = Instance.new("TextButton")
 	textButton.Name = "FakeOverlay"
 	textButton.Size = UDim2.fromScale(1, 1)
@@ -777,15 +607,15 @@ local function fn28(parent)
 	textButton.Parent = parent
 
 	textButton.Activated:Connect(function()
-		if flag5 then return end
-		if not tbl2.bypassCash and not fn20(n2) then
-			fn26(("Need $%s more"):format(TextUtil.commaValue(n2 - game.Players.LocalPlayer.Data.Beli.Value)))
-			task.delay(2, function() if textButton.Parent then fn26(tbl2.bypassCash and "FREE" or nil) end end)
+		if clicked then return end
+		if not gachaFlags.bypassCash and not hasEnoughBeli(currentPrice) then
+			setButtonOverrideText(("Need $%s more"):format(TextUtil.commaValue(currentPrice - LocalPlayer.Data.Beli.Value)))
+			task.delay(2, function() if textButton.Parent then setButtonOverrideText(gachaFlags.bypassCash and "FREE" or nil) end end)
 			return
 		end
-		flag5 = true
+		clicked = true
 		task.delay(0.5, function()
-			flag4 = false
+			gachaHookActive = false
 			textButton:Destroy()
 			pcall(function() GachaWindow:Close() end)
 			task.delay(0.5, function()
@@ -793,322 +623,978 @@ local function fn28(parent)
 				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow and ziolesGachaWindow.Enabled and (not ok3 or result3) then ziolesGachaWindow.Enabled = false end
 			end)
-			fn19(tbl2.boostLuck)
+			executeGachaRoll(gachaFlags.boostLuck)
 		end)
 	end)
 
 	for _, descendant in ipairs(parent:GetDescendants()) do
-		if descendant:IsA("TextLabel") then fn25(descendant) end
+		if descendant:IsA("TextLabel") then hookButtonText(descendant) end
 	end
-	if fn21() then fn24(parent) end
+	if isAnyBypassActive() then styleGreenButton(parent) end
 end
 
-local function fn29(arg)
+local function processZiolesDescendant(arg)
 	if arg.Name == "PurchaseButton" and arg:IsA("GuiButton") then
-		if arg:FindFirstAncestor("ZiolesGacha_Window") and not arg:FindFirstChild("FakeOverlay") then fn28(arg) end
+		if arg:FindFirstAncestor("ZiolesGacha_Window") and not arg:FindFirstChild("FakeOverlay") then attachPurchaseOverlay(arg) end
 	elseif arg:IsA("TextLabel") and arg:FindFirstAncestor("PurchaseButton") and arg:FindFirstAncestor("ZiolesGacha_Window") then
-		fn25(arg)
-	elseif fn21() and arg.Parent and arg.Parent.Name == "PurchaseButton" and arg:FindFirstAncestor("ZiolesGacha_Window") then
-		if arg:IsA("UIStroke") then fn22(arg, "Color", tbl13.stroke)
-		elseif arg.Name == "Trans" and arg:IsA("Frame") then fn22(arg, "BackgroundColor3", tbl13.trans) end
+		hookButtonText(arg)
+	elseif isAnyBypassActive() and arg.Parent and arg.Parent.Name == "PurchaseButton" and arg:FindFirstAncestor("ZiolesGacha_Window") then
+		if arg:IsA("UIStroke") then lockProp(arg, "Color", greenColors.stroke)
+		elseif arg.Name == "Trans" and arg:IsA("Frame") then lockProp(arg, "BackgroundColor3", greenColors.trans) end
 	end
 end
 
 playerGui.DescendantAdded:Connect(function(descendant)
-	if flag4 then fn29(descendant) end
+	if gachaHookActive then processZiolesDescendant(descendant) end
 end)
 
 GachaWindow.Open = function(arg, arg2, arg3, ...)
 	if arg2 == "ZiolesGacha" then
-		fn27()
-		flag4 = false
+		resetGachaHooks()
+		gachaHookActive = false
 		if not nextSelectedFruit then
-			nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
+			nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
 		end
-
-		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime then
-			n2 = type(arg3) == "table" and tonumber(arg3.Value) or 0
-			flag4 = true
-			text = tbl2.bypassCash and "FREE" or nil
+		if gachaFlags.boostLuck or gachaFlags.bypassCash or gachaFlags.bypassTime then
+			currentPrice = type(arg3) == "table" and tonumber(arg3.Value) or 0
+			gachaHookActive = true
+			overrideText = gachaFlags.bypassCash and "FREE" or nil
 			local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 			if ziolesGachaWindow then
 				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do
 					if descendant.Name == "FakeOverlay" then descendant:Destroy() end
 				end
-				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do fn29(descendant) end
+				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
 			end
 		end
 	end
 
-	if arg2 == "ZiolesGacha" and flag4 then
+	if arg2 == "ZiolesGacha" and gachaHookActive then
 		for _, v5 in ipairs({ 0, 0.05, 0.15, 0.3, 0.6 }) do
 			task.delay(v5, function()
-				if not flag4 then return end
+				if not gachaHookActive then return end
 				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow then
-					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do fn29(descendant) end
+					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
 				end
 			end)
 		end
 	end
 
 	local v5 = table.pack(...)
-	local v6 = open
+	local v6 = origGachaOpen
 	v5.n = 4 + v5.n - 1
 	table.move(v5, 1, v5.n, 4, v5)
 	v5[1] = arg; v5[2] = arg2; v5[3] = arg3
 	return v6(table.unpack(v5, 1, v5.n))
 end
 
-local x10LuckyUI = playerGui:FindFirstChild("X10LuckyUI")
-if x10LuckyUI then x10LuckyUI:Destroy() end
-local x10LoadingUI = playerGui:FindFirstChild("X10LoadingUI")
-if x10LoadingUI then x10LoadingUI:Destroy() end
-local oldBillboard = playerGui:FindFirstChild("X10DealerBillboard")
-if oldBillboard then oldBillboard:Destroy() end
+------------------------------------------------------------------------
+-- THEME
+------------------------------------------------------------------------
+local C = {
+	bg0    = Color3.fromRGB(8, 10, 18),
+	bg1    = Color3.fromRGB(18, 22, 38),
+	sea    = Color3.fromRGB(10, 36, 70),
+	panel  = Color3.fromRGB(26, 31, 50),
+	line   = Color3.fromRGB(60, 70, 104),
+	text   = Color3.fromRGB(244, 247, 255),
+	sub    = Color3.fromRGB(150, 162, 195),
+	cyan   = Color3.fromRGB(0, 229, 255),
+	blue   = Color3.fromRGB(41, 121, 255),
+	purple = Color3.fromRGB(168, 82, 255),
+	red    = Color3.fromRGB(255, 70, 90),
+	gold   = Color3.fromRGB(255, 205, 70),
+	green  = Color3.fromRGB(50, 210, 100),
+	gray   = Color3.fromRGB(140, 148, 170),
+	off    = Color3.fromRGB(50, 56, 80),
+	ink    = Color3.fromRGB(6, 8, 16),
+	white  = Color3.new(1, 1, 1),
+}
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "X10LuckyUI"
-screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 999
-screenGui.IgnoreGuiInset = true
-screenGui.Enabled = false
-screenGui.Parent = playerGui
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 230, 0, 286)
-frame.Position = UDim2.new(0, 10, 0.5, -143)
-frame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
-frame.BorderSizePixel = 0
-frame.Parent = screenGui
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-local uiStroke = Instance.new("UIStroke", frame)
-uiStroke.Color = Color3.fromRGB(70, 70, 110)
-uiStroke.Thickness = 1.5
-local frame2 = Instance.new("Frame")
-frame2.Size = UDim2.new(1, 0, 0, 38)
-frame2.BackgroundColor3 = Color3.fromRGB(28, 28, 48)
-frame2.BorderSizePixel = 0
-frame2.Parent = frame
-Instance.new("UICorner", frame2).CornerRadius = UDim.new(0, 12)
-local textLabel = Instance.new("TextLabel")
-textLabel.Size = UDim2.fromScale(1, 1)
-textLabel.BackgroundTransparency = 1
-textLabel.Text = "✨  X100 Lucky Script"
-textLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
-textLabel.Font = Enum.Font.GothamBold
-textLabel.TextSize = 16
-textLabel.Parent = frame2
-local flag5 = nil
-local position = nil
-local position2 = nil
+local RARITY = {
+	Common    = { color = Color3.fromRGB(205, 210, 222), dark = Color3.fromRGB(80, 86, 100),  fx = 0 },
+	Uncommon  = { color = Color3.fromRGB(70, 165, 255),  dark = Color3.fromRGB(16, 60, 130),  fx = 0 },
+	Rare      = { color = Color3.fromRGB(170, 95, 255),  dark = Color3.fromRGB(60, 20, 130),  fx = 1 },
+	Legendary = { color = Color3.fromRGB(255, 85, 205),  dark = Color3.fromRGB(120, 20, 95),  fx = 2 },
+	Mythical  = { color = Color3.fromRGB(255, 60, 72),   dark = Color3.fromRGB(110, 8, 22),   fx = 3 },
+	Unknown   = { color = C.cyan,                         dark = Color3.fromRGB(0, 70, 95),    fx = 0 },
+}
 
-frame2.InputBegan:Connect(function(input)
+local F_TITLE = Enum.Font.FredokaOne
+local F_BOLD  = Enum.Font.GothamBold
+local F_REG   = Enum.Font.GothamMedium
+
+------------------------------------------------------------------------
+-- HELPERS
+------------------------------------------------------------------------
+local alive, conns = true, {}
+local function bind(signal, fn) local c = signal:Connect(fn); table.insert(conns, c); return c end
+
+local function new(class, props, children)
+	local o = Instance.new(class)
+	local parent
+	for k, v in pairs(props or {}) do if k == "Parent" then parent = v else o[k] = v end end
+	for _, ch in ipairs(children or {}) do ch.Parent = o end
+	if parent then o.Parent = parent end
+	return o
+end
+local function corner(r) return new("UICorner", { CornerRadius = UDim.new(0, r) }) end
+local function circle() return new("UICorner", { CornerRadius = UDim.new(1, 0) }) end
+local function stroke(color, thick, trans)
+	return new("UIStroke", { Color = color, Thickness = thick or 1, Transparency = trans or 0,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+end
+local function textStroke(color, thick)
+	return new("UIStroke", { Color = color, Thickness = thick or 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual })
+end
+local function grad(colors, rot)
+	local kp = {}
+	for i, col in ipairs(colors) do kp[i] = ColorSequenceKeypoint.new((i - 1) / math.max(#colors - 1, 1), col) end
+	return new("UIGradient", { Color = ColorSequence.new(kp), Rotation = rot or 0 })
+end
+local function tween(o, t, props, style, dir)
+	local tw = TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+	tw:Play(); return tw
+end
+local function label(props, children)
+	props.BackgroundTransparency = 1
+	props.Font = props.Font or F_REG
+	props.TextSize = props.TextSize or 12
+	props.TextColor3 = props.TextColor3 or C.text
+	return new("TextLabel", props, children)
+end
+local function frame(props, children)
+	if props.BorderSizePixel == nil then props.BorderSizePixel = 0 end
+	return new("Frame", props, children)
+end
+local function fadeEdges(mid)
+	return NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, mid or 0), NumberSequenceKeypoint.new(1, 1) })
+end
+
+local SWIRL_T = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.55, 0.1),
+	NumberSequenceKeypoint.new(0.6, 1), NumberSequenceKeypoint.new(1, 1) })
+local function makeFruit(parent, size, z, pos)
+	local body = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = pos or UDim2.new(0.5, 0, 0.5, size * 0.06),
+		Size = UDim2.fromOffset(size, size), BackgroundColor3 = C.white, ZIndex = z, Parent = parent }, { circle() })
+	local g = grad({ C.cyan, C.blue }, 135); g.Parent = body
+	local outline = stroke(C.ink, math.max(1, size / 26), 0.1); outline.Parent = body
+	local swirls = {}
+	for i, s in ipairs({ { 0.66, -0.06, 0.02, 40 }, { 0.4, 0.1, 0.1, 160 }, { 0.2, -0.04, 0.16, 280 } }) do
+		local ring = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5 + s[2], 0.5 + s[3]),
+			Size = UDim2.fromScale(s[1], s[1]), BackgroundTransparency = 1, ZIndex = z + 1, Parent = body }, { circle() })
+		local st = stroke(C.ink, math.max(1, size / 22), 0.35); st.Parent = ring
+		new("UIGradient", { Rotation = s[4], Transparency = SWIRL_T, Parent = st })
+		swirls[i] = st
+	end
+	frame({ Position = UDim2.fromScale(0.18, 0.14), Size = UDim2.fromScale(0.26, 0.16), Rotation = -30,
+		BackgroundColor3 = C.white, BackgroundTransparency = 0.45, ZIndex = z + 2, Parent = body }, { circle() })
+	frame({ AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 0, size * 0.08), Size = UDim2.fromOffset(math.max(2, size * 0.07), size * 0.2),
+		Rotation = 12, BackgroundColor3 = Color3.fromRGB(70, 45, 25), ZIndex = z + 2, Parent = body }, { corner(2) })
+	frame({ AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0.5, 1, 0, size * 0.04), Size = UDim2.fromOffset(size * 0.3, size * 0.15),
+		Rotation = -22, BackgroundColor3 = Color3.fromRGB(70, 220, 120), ZIndex = z + 2, Parent = body }, { circle(), stroke(C.ink, 1, 0.3) })
+	return { body = body, grad = g, swirls = swirls }
+end
+local function paintFruit(f, rarity)
+	local info = RARITY[rarity] or RARITY.Unknown
+	f.grad.Color = ColorSequence.new(info.color:Lerp(C.white, 0.25), info.color:Lerp(info.dark, 0.35))
+	for _, s in ipairs(f.swirls) do s.Color = info.dark end
+end
+
+------------------------------------------------------------------------
+-- SCREEN GUI
+------------------------------------------------------------------------
+local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false, IgnoreGuiInset = true,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999 })
+local parented = false
+if typeof(gethui) == "function" then parented = pcall(function() gui.Parent = gethui() end) end
+if not parented then parented = pcall(function() gui.Parent = game:GetService("CoreGui") end) end
+if not parented then gui.Parent = playerGui end
+
+local W, H, HEADER = 276, 396, 42
+local CARD_W, CARD_H = W - 20, 174
+
+local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 24),
+	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, Parent = gui })
+local rootScale = new("UIScale", { Parent = Holder })
+local Pop = frame({ Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Holder })
+local mainScale = new("UIScale", { Scale = 0.9, Parent = Pop })
+
+frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 6), Size = UDim2.new(1, 18, 1, 18),
+	BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.65, ZIndex = 1, Parent = Pop }, { corner(22) })
+local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 8, 1, 8),
+	BackgroundColor3 = C.blue, BackgroundTransparency = 0.8, ZIndex = 1, Parent = Pop }, { corner(18) })
+
+local Main = frame({ Name = "Main", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.white, ClipsDescendants = true,
+	ZIndex = 2, Parent = Pop }, { corner(14), grad({ C.bg1, C.bg0, C.sea }, 100) })
+local borderStroke = stroke(C.white, 2, 0); borderStroke.Parent = Main
+local borderGrad = grad({ C.cyan, C.blue, C.purple, C.blue, C.cyan }, 0); borderGrad.Parent = borderStroke
+
+------------------------------------------------------------------------
+-- HEADER
+------------------------------------------------------------------------
+local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ZIndex = 4, Parent = Main },
+	{ grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
+
+local headIcon = frame({ Position = UDim2.fromOffset(9, 7), Size = UDim2.fromOffset(28, 28), BackgroundColor3 = C.panel,
+	ZIndex = 5, Parent = Header }, { corner(8) })
+stroke(C.cyan, 1.2, 0.2).Parent = headIcon
+local headFruit = makeFruit(headIcon, 17, 6)
+headFruit.grad.Color = ColorSequence.new(C.cyan, C.purple)
+for _, s in ipairs(headFruit.swirls) do s.Color = Color3.fromRGB(30, 20, 80) end
+
+label({ Position = UDim2.fromOffset(44, 5), Size = UDim2.new(1, -104, 0, 18), Text = "Fruit Spin Predictor",
+	Font = F_TITLE, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = Header },
+	{ textStroke(C.ink, 1.5) })
+local brandLbl = label({ Position = UDim2.fromOffset(45, 23), Size = UDim2.new(1, -104, 0, 12),
+	Text = CONFIG.BrandName .. " • " .. CONFIG.BrandTag .. " " .. CONFIG.Version, Font = F_BOLD, TextSize = 9,
+	TextColor3 = C.white, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = Header })
+local brandGrad = grad({ C.cyan, C.blue, C.purple, C.cyan }, 0); brandGrad.Parent = brandLbl
+
+local function headerButton(text, xOff)
+	local b = new("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, xOff, 0, 10), Size = UDim2.fromOffset(22, 22),
+		BackgroundColor3 = C.panel, AutoButtonColor = false, Text = text, Font = F_TITLE, TextSize = 15,
+		TextColor3 = C.text, ZIndex = 6, Parent = Header }, { corner(7), textStroke(C.ink, 1) })
+	local s = stroke(C.line, 1.2, 0); s.Parent = b
+	return b, s
+end
+local MinBtn, minStroke = headerButton("–", -36)
+local CloseBtn, closeStroke = headerButton("X", -10)
+
+frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan,
+	ZIndex = 5, Parent = Main }, { new("UIGradient", { Transparency = fadeEdges(0) }) })
+
+------------------------------------------------------------------------
+-- BODY
+------------------------------------------------------------------------
+local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
+	BackgroundTransparency = 1, ZIndex = 3, Parent = Main })
+
+-- Toggle row (Show Next Dealer Fruit)
+local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
+	ZIndex = 4, Parent = Body }, { corner(10) })
+local toggleRowStroke = stroke(C.line, 1.2, 0); toggleRowStroke.Parent = ToggleRow
+label({ Position = UDim2.fromOffset(10, 4), Size = UDim2.new(1, -64, 0, 16), Text = "Enable Fruit Predictor",
+	Font = F_TITLE, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = ToggleRow },
+	{ textStroke(C.ink, 1) })
+local toggleSub = label({ Position = UDim2.fromOffset(10, 20), Size = UDim2.new(1, -64, 0, 11), Text = "OFF",
+	Font = F_BOLD, TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = ToggleRow })
+local Switch = frame({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(40, 21),
+	BackgroundColor3 = C.off, ZIndex = 5, Parent = ToggleRow }, { circle(), stroke(C.ink, 1, 0.3) })
+local switchGrad = grad({ C.cyan, C.blue, C.purple }, 0); switchGrad.Enabled = false; switchGrad.Parent = Switch
+local Knob = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 3, 0.5, 0), Size = UDim2.fromOffset(15, 15),
+	BackgroundColor3 = Color3.fromRGB(185, 192, 212), ZIndex = 6, Parent = Switch }, { circle() })
+local ToggleHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 7, Parent = ToggleRow })
+
+-- Quick Toggle Bar ABOVE Preview Card (Boost Luck + Bypass Time + Bypass Money)
+local QuickBar = frame({ Name = "QuickBar", Position = UDim2.fromOffset(10, 50), Size = UDim2.new(1, -20, 0, 34),
+	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
+new("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal,
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	VerticalAlignment = Enum.VerticalAlignment.Center,
+	Padding = UDim.new(0, 6),
+	Parent = QuickBar,
+})
+
+local quickButtonRefs = {}
+local function makeQuickBtn(key, titleText, activeCol)
+	local btn = new("TextButton", {
+		Size = UDim2.new(0.333, -4, 1, 0),
+		BackgroundColor3 = C.panel,
+		AutoButtonColor = false,
+		Text = "",
+		ZIndex = 5,
+		Parent = QuickBar,
+	}, { corner(8) })
+	local st = stroke(C.line, 1.2, 0); st.Parent = btn
+
+	local dot = frame({
+		Position = UDim2.fromOffset(7, 13),
+		Size = UDim2.fromOffset(7, 7),
+		BackgroundColor3 = C.gray,
+		ZIndex = 6,
+		Parent = btn,
+	}, { circle() })
+
+	local lbl = label({
+		Position = UDim2.fromOffset(18, 0),
+		Size = UDim2.new(1, -22, 1, 0),
+		Text = titleText,
+		Font = F_BOLD,
+		TextSize = 9,
+		TextColor3 = C.sub,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 6,
+		Parent = btn,
+	})
+
+	local function refreshVisual(isOn)
+		tween(btn, 0.2, { BackgroundColor3 = isOn and activeCol:Lerp(C.bg0, 0.72) or C.panel })
+		tween(st, 0.2, { Color = isOn and activeCol or C.line })
+		tween(dot, 0.2, { BackgroundColor3 = isOn and activeCol or C.gray })
+		tween(lbl, 0.2, { TextColor3 = isOn and C.white or C.sub })
+	end
+
+	quickButtonRefs[key] = refreshVisual
+	return btn, refreshVisual
+end
+
+local BoostLuckBtn = makeQuickBtn("boostLuck", "Boost\nLuck", C.green)
+local BypassTimeBtn = makeQuickBtn("bypassTime", "Bypass\nTime", C.cyan)
+local BypassMoneyBtn = makeQuickBtn("bypassCash", "Bypass\nMoney", C.gold)
+
+-- Status row
+local StatusChip = frame({ Position = UDim2.fromOffset(10, 92), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X,
+	BackgroundColor3 = C.gray, BackgroundTransparency = 0.82, ZIndex = 4, Parent = Body }, {
+	circle(), new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 10) }),
+	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6) }),
+})
+local statusStroke = stroke(C.gray, 1, 0.4); statusStroke.Parent = StatusChip
+local StatusDot = frame({ Size = UDim2.fromOffset(7, 7), BackgroundColor3 = C.gray, ZIndex = 5, LayoutOrder = 1, Parent = StatusChip }, { circle() })
+local StatusText = label({ Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X, Text = "Waiting",
+	Font = F_BOLD, TextSize = 10, TextColor3 = C.gray, ZIndex = 5, LayoutOrder = 2, Parent = StatusChip })
+local UpdatedLbl = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 92), Size = UDim2.fromOffset(130, 20),
+	Text = "No data yet", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
+
+-- Preview card
+local Card = frame({ Name = "Card", Position = UDim2.fromOffset(10, 120), Size = UDim2.new(1, -20, 0, CARD_H),
+	BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Body },
+	{ corner(12), grad({ Color3.fromRGB(28, 36, 62), Color3.fromRGB(12, 16, 30), C.sea }, 90) })
+local cardStroke = stroke(C.line, 1.6, 0); cardStroke.Parent = Card
+local cardTint = frame({ Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.cyan, BackgroundTransparency = 1, ZIndex = 4, Parent = Card },
+	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.15) }) })
+
+local waves = {}
+for li, spec in ipairs({ { C.blue, 0.7, 26, 16, 4 }, { C.cyan, 0.84, 20, -24, 10 } }) do
+	local col, tr, sz, speed, rise = table.unpack(spec)
+	local layer = { dots = {}, tr = tr, sp = speed, gap = sz * 0.8, y = CARD_H - rise - sz * 0.35, ph = li }
+	for i = 1, math.ceil(CARD_W / layer.gap) + 2 do
+		layer.dots[i] = frame({ AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = col,
+			BackgroundTransparency = tr, ZIndex = 4, Parent = Card }, { circle() })
+	end
+	waves[li] = layer
+end
+
+local FX = frame({ Name = "FX", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 5, Parent = Card })
+local Flash = frame({ Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.white, BackgroundTransparency = 1, ZIndex = 14, Parent = Card })
+
+local function view(name)
+	return frame({ Name = name, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, ZIndex = 6, Parent = Card })
+end
+local EmptyView, ScanView, ReelView, ResultView = view("Empty"), view("Scan"), view("Reel"), view("Result")
+
+-- Empty view
+local EmptyIcon = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 52), Size = UDim2.fromOffset(54, 54),
+	BackgroundColor3 = C.panel, ZIndex = 6, Parent = EmptyView }, { circle() })
+local emptyIconStroke = stroke(C.line, 2, 0); emptyIconStroke.Parent = EmptyIcon
+local EmptyGlyph = label({ Size = UDim2.fromScale(1, 1), Text = "?", Font = F_TITLE, TextSize = 26, TextColor3 = C.sub,
+	ZIndex = 7, Parent = EmptyIcon }, { textStroke(C.ink, 1.5) })
+local EmptyTitle = label({ Position = UDim2.fromOffset(0, 86), Size = UDim2.new(1, 0, 0, 18), Text = "No Fruit Detected",
+	Font = F_TITLE, TextSize = 15, ZIndex = 6, Parent = EmptyView }, { textStroke(C.ink, 1.5) })
+local EmptySub = label({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 107), Size = UDim2.new(1, -30, 0, 36),
+	Text = "Turn on the predictor to see the next shop fruit.", TextSize = 10, TextColor3 = C.sub, TextWrapped = true,
+	TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 6, Parent = EmptyView })
+
+-- Scan view
+local Radar = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 62), Size = UDim2.fromOffset(84, 84),
+	BackgroundColor3 = C.cyan, BackgroundTransparency = 0.9, ZIndex = 6, Parent = ScanView }, { circle(), stroke(C.cyan, 1.5, 0.15) })
+frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(48, 48),
+	BackgroundTransparency = 1, ZIndex = 6, Parent = Radar }, { circle(), stroke(C.cyan, 1, 0.5) })
+frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(7, 7),
+	BackgroundColor3 = C.cyan, ZIndex = 8, Parent = Radar }, { circle() })
+local RadarSweep = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(80, 3),
+	BackgroundColor3 = C.cyan, ZIndex = 7, Parent = Radar }, { new("UIGradient", { Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 0) }) }) })
+label({ Position = UDim2.fromOffset(0, 112), Size = UDim2.new(1, 0, 0, 16), Text = "Scanning Dealer...",
+	Font = F_TITLE, TextSize = 14, TextColor3 = C.cyan, ZIndex = 6, Parent = ScanView }, { textStroke(C.ink, 1.5) })
+local ProgTrack = frame({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 134), Size = UDim2.fromOffset(150, 6),
+	BackgroundColor3 = C.ink, ZIndex = 6, Parent = ScanView }, { circle(), stroke(C.line, 1, 0) })
+local ProgFill = frame({ Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.white, ZIndex = 7, Parent = ProgTrack },
+	{ circle(), grad({ C.cyan, C.blue, C.purple }, 0) })
+local ScanLine = frame({ Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan, ZIndex = 8, Parent = ScanView },
+	{ new("UIGradient", { Transparency = fadeEdges(0.05) }) })
+frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = C.cyan, ZIndex = 7, Parent = ScanLine },
+	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.8) }) })
+
+-- Reel view
+label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
+	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
+local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 82), Size = UDim2.fromOffset(196, 74),
+	BackgroundColor3 = C.ink, ZIndex = 6, Parent = ReelView }, { corner(12) })
+local slotStroke = stroke(C.gold, 2, 0); slotStroke.Parent = Slot
+local slotScale = new("UIScale", { Parent = Slot })
+for _, side in ipairs({ -1, 1 }) do
+	label({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5 + side * 0.58, 0, 0.5, 0), Size = UDim2.fromOffset(14, 20),
+		Text = side < 0 and ">" or "<", Font = F_TITLE, TextSize = 20, TextColor3 = C.gold, ZIndex = 7, Parent = Slot }, { textStroke(C.ink, 1.5) })
+end
+local reelFruit = makeFruit(Slot, 40, 8, UDim2.new(0, 36, 0.5, 2))
+local ReelName = label({ Position = UDim2.fromOffset(66, 0), Size = UDim2.new(1, -72, 1, 0), Text = "", Font = F_TITLE,
+	TextSize = 20, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
+
+-- Result view
+local ICON_X, ICON_Y = CARD_W / 2, 62
+label({ Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 12), Text = "NEXT SHOP FRUIT", Font = F_BOLD,
+	TextSize = 9, TextColor3 = C.sub, ZIndex = 6, Parent = ResultView })
+
+local rays = {}
+for i = 1, 12 do
+	rays[i] = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(i % 2 == 0 and 6 or 9, 44),
+		BackgroundColor3 = C.cyan, BackgroundTransparency = 1, ZIndex = 6, Parent = ResultView },
+		{ corner(4), new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.15) }) })
+end
+local Halo = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(ICON_X, ICON_Y), Size = UDim2.fromOffset(104, 104),
+	BackgroundColor3 = C.cyan, BackgroundTransparency = 0.9, ZIndex = 6, Parent = ResultView }, { circle() })
+local GlowRing = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(ICON_X, ICON_Y), Size = UDim2.fromOffset(86, 86),
+	BackgroundColor3 = C.cyan, BackgroundTransparency = 0.82, ZIndex = 6, Parent = ResultView }, { circle() })
+local ringStroke = stroke(C.cyan, 2.5, 0.1); ringStroke.Parent = GlowRing
+local glowScale = new("UIScale", { Parent = GlowRing })
+local haloScale = new("UIScale", { Parent = Halo })
+
+local IconHolder = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(ICON_X, ICON_Y), Size = UDim2.fromOffset(72, 72),
+	BackgroundColor3 = C.ink, ZIndex = 7, Parent = ResultView }, { circle() })
+local iconStroke = stroke(C.cyan, 2.5, 0); iconStroke.Parent = IconHolder
+local iconScale = new("UIScale", { Scale = 0, Parent = IconHolder })
+local IconImage = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.84, 0.84),
+	BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, Image = "", Visible = false, ZIndex = 8, Parent = IconHolder })
+local bigFruit = makeFruit(IconHolder, 50, 8)
+
+local NameLbl = label({ Position = UDim2.fromOffset(0, 104), Size = UDim2.new(1, 0, 0, 24), Text = "", Font = F_TITLE,
+	TextSize = 22, ZIndex = 9, Parent = ResultView }, { textStroke(C.ink, 2) })
+local Badge = frame({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 130), Size = UDim2.fromOffset(0, 18),
+	AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = C.cyan, ZIndex = 9, Parent = ResultView },
+	{ circle(), new("UIPadding", { PaddingLeft = UDim.new(0, 11), PaddingRight = UDim.new(0, 11) }) })
+local badgeStroke = stroke(C.ink, 1.5, 0); badgeStroke.Parent = Badge
+local BadgeText = label({ Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = "", Font = F_TITLE,
+	TextSize = 11, ZIndex = 10, Parent = Badge }, { textStroke(C.ink, 1.2) })
+local DetailLbl = label({ Position = UDim2.fromOffset(0, 153), Size = UDim2.new(1, 0, 0, 12), Text = "", TextSize = 9,
+	TextColor3 = C.text, RichText = true, ZIndex = 9, Parent = ResultView }, { textStroke(C.ink, 1) })
+
+local Shine = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(-0.3, 0, 0.5, 0), Size = UDim2.new(0, 34, 1.6, 0),
+	Rotation = 18, BackgroundColor3 = C.white, ZIndex = 13, Parent = Card }, { new("UIGradient", { Transparency = fadeEdges(0.78) }) })
+
+-- Refresh button
+local BtnBase = frame({ Position = UDim2.fromOffset(10, 302), Size = UDim2.new(1, -20, 0, 34), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
+	ZIndex = 4, Parent = Body }, { corner(10) })
+local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -3), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
+	BackgroundColor3 = C.off, Text = "", ZIndex = 5, Parent = BtnBase }, { corner(10) })
+local refreshGrad = grad({ C.cyan, C.blue, C.purple }, 0); refreshGrad.Enabled = false; refreshGrad.Parent = RefreshBtn
+local refreshStroke = stroke(C.ink, 1.5, 0); refreshStroke.Parent = RefreshBtn
+frame({ Position = UDim2.fromOffset(6, 3), Size = UDim2.new(1, -12, 0, 8), BackgroundColor3 = C.white, BackgroundTransparency = 0.82,
+	ZIndex = 6, Parent = RefreshBtn }, { corner(4) })
+local RefreshLbl = label({ Size = UDim2.fromScale(1, 1), Text = "Refresh Fruit", Font = F_TITLE, TextSize = 15,
+	TextColor3 = C.sub, ZIndex = 7, Parent = RefreshBtn }, { textStroke(C.ink, 1.5) })
+local Spinner = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0.5, -52, 0.5, 0), Size = UDim2.fromOffset(13, 13),
+	BackgroundTransparency = 1, Visible = false, ZIndex = 7, Parent = RefreshBtn }, { circle() })
+local spinStroke = stroke(C.white, 2.2, 0); spinStroke.Parent = Spinner
+new("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = spinStroke })
+
+-- Footer
+local FooterBrand = label({ Position = UDim2.fromOffset(10, 338), Size = UDim2.new(0.6, 0, 0, 14), Text = "• " .. CONFIG.BrandName .. " " .. CONFIG.BrandTag,
+	Font = F_TITLE, TextSize = 11, TextColor3 = C.white, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4, Parent = Body })
+local footerGrad = grad({ C.cyan, C.purple, C.blue, C.cyan }, 0); footerGrad.Parent = FooterBrand
+label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 338), Size = UDim2.new(0.4, 0, 0, 14),
+	Text = CONFIG.ToggleKey.Name .. " = hide", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
+
+------------------------------------------------------------------------
+-- WHOLE-WINDOW FADE
+------------------------------------------------------------------------
+local function snapshot(root)
+	local list = {}
+	for _, o in ipairs(root:GetDescendants()) do
+		if o:IsA("GuiObject") then
+			local e = { o = o, p = { BackgroundTransparency = o.BackgroundTransparency } }
+			if o:IsA("TextLabel") or o:IsA("TextButton") then e.p.TextTransparency = o.TextTransparency end
+			if o:IsA("ImageLabel") then e.p.ImageTransparency = o.ImageTransparency end
+			table.insert(list, e)
+		elseif o:IsA("UIStroke") then
+			table.insert(list, { o = o, p = { Transparency = o.Transparency } })
+		end
+	end
+	return list
+end
+local function fadeAll(list, show, t)
+	for _, e in ipairs(list) do
+		local goal = {}
+		for k, v in pairs(e.p) do if show then e.o[k] = 1; goal[k] = v else goal[k] = 1 end end
+		tween(e.o, t, goal)
+	end
+end
+
+------------------------------------------------------------------------
+-- STATE & EFFECTS
+------------------------------------------------------------------------
+local state = { enabled = false, busy = false, token = 0, minimized = false,
+	status = "Waiting", current = nil, view = nil, fx = nil, fxLevel = 0, rays = false }
+local function rarityInfo(r) return RARITY[r] or RARITY.Unknown end
+
+local function setStatus(kind, rarity)
+	state.status = kind
+	local col = (kind == "Scanning" and C.cyan) or (kind == "Error" and C.red)
+		or (kind == "Detected" and rarityInfo(rarity).color) or C.gray
+	StatusText.Text = kind
+	tween(StatusText, 0.25, { TextColor3 = col })
+	tween(StatusDot, 0.25, { BackgroundColor3 = col, BackgroundTransparency = 0 })
+	tween(StatusChip, 0.25, { BackgroundColor3 = col })
+	tween(statusStroke, 0.25, { Color = col })
+end
+local function stamp(text) UpdatedLbl.Text = text or ("Updated " .. os.date("%H:%M:%S")) end
+
+local VIEWS = { Empty = EmptyView, Scan = ScanView, Reel = ReelView, Result = ResultView }
+local function showView(name)
+	if state.view == name then return end
+	for n, v in pairs(VIEWS) do v.Visible = (n == name) end
+	state.view = name
+	local v = VIEWS[name]
+	v.Position = UDim2.fromOffset(0, 10)
+	tween(v, 0.35, { Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Back)
+end
+
+local function clearFX()
+	state.fx, state.fxLevel, state.rays = nil, 0, false
+	for _, c in ipairs(FX:GetChildren()) do c:Destroy() end
+	for _, r in ipairs(rays) do r.BackgroundTransparency = 1 end
+	tween(cardStroke, 0.3, { Color = C.line, Transparency = 0 })
+	tween(cardTint, 0.3, { BackgroundTransparency = 1 })
+	tween(Haze, 0.4, { BackgroundColor3 = C.blue, BackgroundTransparency = 0.8 })
+end
+
+local function showEmpty(title, sub, kind)
+	clearFX()
+	EmptyTitle.Text, EmptySub.Text = title, sub
+	local col = (kind == "error" and C.red) or (kind == "source" and C.cyan) or C.sub
+	EmptyGlyph.Text = (kind == "error" and "!") or (kind == "source" and "i") or "?"
+	EmptyGlyph.TextColor3 = col
+	emptyIconStroke.Color = kind and col or C.line
+	showView("Empty")
+end
+
+local function setButtonEnabled(on)
+	refreshGrad.Enabled = on
+	tween(RefreshBtn, 0.3, { BackgroundColor3 = on and C.white or C.off })
+	tween(RefreshLbl, 0.3, { TextColor3 = on and C.white or C.sub })
+end
+local function setButtonLoading(on)
+	Spinner.Visible = on
+	RefreshLbl.Text = on and "    Scanning..." or "Refresh Fruit"
+end
+
+local function fxCount() return #FX:GetChildren() end
+
+local function spawnParticle(color, fromX, fromY, dx, dy, life)
+	if fxCount() > 42 then return end
+	local sz = math.random(3, 6)
+	local p = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(sz, sz),
+		Position = UDim2.fromOffset(fromX or math.random(24, CARD_W - 24), fromY or math.random(110, CARD_H - 10)),
+		BackgroundColor3 = (math.random() < 0.3) and C.white or color, BackgroundTransparency = 0.05, ZIndex = 5, Parent = FX }, { circle() })
+	tween(p, life or math.random(12, 20) / 10, {
+		Position = p.Position + UDim2.fromOffset(dx or math.random(-14, 14), dy or -math.random(50, 100)),
+		BackgroundTransparency = 1, Size = UDim2.fromOffset(1, 1),
+	}, Enum.EasingStyle.Sine).Completed:Connect(function() p:Destroy() end)
+end
+
+local function spawnStar(color)
+	if fxCount() > 42 then return end
+	local s = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(math.random(12, CARD_W - 12), math.random(12, CARD_H - 30)), Rotation = math.random(0, 45),
+		ZIndex = 5, Parent = FX })
+	local sc = new("UIScale", { Scale = 0.2, Parent = s })
+	local bars = {
+		frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 0, 0, 2),
+			BackgroundColor3 = color, BackgroundTransparency = 1, Parent = s }, { circle() }),
+		frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 2, 1, 0),
+			BackgroundColor3 = C.white, BackgroundTransparency = 1, Parent = s }, { circle() }),
+	}
+	tween(sc, 0.35, { Scale = 1.2 }, Enum.EasingStyle.Back)
+	for _, b in ipairs(bars) do tween(b, 0.35, { BackgroundTransparency = 0 }) end
+	task.delay(0.4, function()
+		if not s.Parent then return end
+		tween(sc, 0.5, { Scale = 0 })
+		for _, b in ipairs(bars) do tween(b, 0.5, { BackgroundTransparency = 1 }) end
+		task.delay(0.55, function() s:Destroy() end)
+	end)
+end
+
+local function spawnShockwave(color)
+	local ring = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(ICON_X, ICON_Y), Size = UDim2.fromOffset(72, 72),
+		BackgroundTransparency = 1, ZIndex = 5, Parent = FX }, { circle() })
+	local st = stroke(color, 3, 0.1); st.Parent = ring
+	local sc = new("UIScale", { Parent = ring })
+	tween(sc, 0.8, { Scale = 2.4 }, Enum.EasingStyle.Quad)
+	tween(st, 0.8, { Transparency = 1, Thickness = 1 }).Completed:Connect(function() ring:Destroy() end)
+end
+
+local function spawnLightning(color)
+	local ang = math.random() * math.pi * 2
+	local x, y = ICON_X + math.cos(ang) * 40, ICON_Y + math.sin(ang) * 40
+	local parts = {}
+	for _ = 1, 4 do
+		local len = math.random(9, 16)
+		local a = ang + (math.random() - 0.5) * 1.6
+		local nx, ny = x + math.cos(a) * len, y + math.sin(a) * len
+		local mid = UDim2.fromOffset((x + nx) / 2, (y + ny) / 2)
+		table.insert(parts, frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = mid, Size = UDim2.fromOffset(len + 2, 7),
+			Rotation = math.deg(a), BackgroundColor3 = color, BackgroundTransparency = 0.5, ZIndex = 5, Parent = FX }, { circle() }))
+		table.insert(parts, frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = mid, Size = UDim2.fromOffset(len + 2, 2),
+			Rotation = math.deg(a), BackgroundColor3 = C.white, ZIndex = 5, Parent = FX }))
+		x, y = nx, ny
+	end
+	cardTint.BackgroundTransparency = 0.75
+	tween(cardTint, 0.35, { BackgroundTransparency = 0.9 })
+	for _, p in ipairs(parts) do tween(p, 0.3, { BackgroundTransparency = 1 }).Completed:Connect(function() p:Destroy() end) end
+end
+
+local function shineSweep()
+	Shine.Position = UDim2.new(-0.3, 0, 0.5, 0)
+	tween(Shine, 0.85, { Position = UDim2.new(1.3, 0, 0.5, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+end
+
+local function shake(power)
+	task.spawn(function()
+		for i = 1, 7 do
+			local p = math.max(1, math.floor(power * (1 - i / 8)))
+			Pop.Position = UDim2.fromOffset(math.random(-p, p), math.random(-p, p))
+			task.wait(0.03)
+		end
+		Pop.Position = UDim2.fromOffset(0, 0)
+	end)
+end
+
+------------------------------------------------------------------------
+-- REEL + REVEAL
+------------------------------------------------------------------------
+local function spinReel(final, my)
+	showView("Reel")
+	slotScale.Scale = 1
+	slotStroke.Color = C.gold
+	local steps, start = 16, math.random(#REEL_LIST)
+	for i = 1, steps do
+		if not alive or my ~= state.token then return false end
+		local pick = (i == steps) and final or REEL_LIST[(start + i) % #REEL_LIST + 1]
+		ReelName.Text = pick.name
+		ReelName.TextColor3 = rarityInfo(pick.rarity).color
+		paintFruit(reelFruit, pick.rarity)
+		ReelName.Position = UDim2.fromOffset(66, -10)
+		tween(ReelName, 0.07, { Position = UDim2.fromOffset(66, 0) })
+		task.wait(0.025 + (i / steps) ^ 3 * 0.18)
+	end
+	local col = rarityInfo(final.rarity).color
+	slotStroke.Color = col
+	slotScale.Scale = 1.12
+	tween(slotScale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
+	task.wait(0.35)
+	return alive and my == state.token
+end
+
+local function reveal(data)
+	state.current = data
+	local info = rarityInfo(data.rarity)
+	local col = info.color
+	local special = info.fx >= 2
+	clearFX()
+	state.fx, state.fxLevel, state.rays = col, info.fx, info.fx >= 1
+
+	NameLbl.Text = data.name
+	NameLbl.TextColor3 = col
+	BadgeText.Text = string.upper(data.rarity)
+	BadgeText.TextColor3 = C.white
+	Badge.BackgroundColor3 = col
+	badgeStroke.Color = special and C.gold or C.ink
+	DetailLbl.Text = string.format('Shop Drop: <b>%s</b>  |  Rarity: <font color="#%s"><b>%s</b></font>',
+		data.name, col:ToHex(), data.rarity)
+	GlowRing.BackgroundColor3, ringStroke.Color, Halo.BackgroundColor3 = col, col, col
+	iconStroke.Color = special and C.gold or col
+	for i, r in ipairs(rays) do r.BackgroundColor3 = (info.fx == 3 and i % 2 == 0) and C.gold or col end
+	paintFruit(bigFruit, data.rarity)
+	cardTint.BackgroundColor3 = col
+	tween(cardTint, 0.5, { BackgroundTransparency = 0.9 })
+	tween(cardStroke, 0.4, { Color = special and C.gold or col })
+	tween(Haze, 0.5, { BackgroundColor3 = col, BackgroundTransparency = 0.72 })
+
+	if data.sprite and data.sprite.Image then
+		IconImage.Image = data.sprite.Image
+		IconImage.ImageRectOffset = data.sprite.ImageRectOffset or Vector2.new(0, 0)
+		IconImage.ImageRectSize = data.sprite.ImageRectSize or Vector2.new(0, 0)
+		IconImage.Visible = true
+		bigFruit.body.Visible = false
+	elseif data.icon then
+		IconImage.Image = data.icon
+		IconImage.ImageRectOffset = Vector2.new(0, 0)
+		IconImage.ImageRectSize = Vector2.new(0, 0)
+		IconImage.Visible = true
+		bigFruit.body.Visible = false
+	else
+		IconImage.Visible = false
+		bigFruit.body.Visible = true
+	end
+
+	showView("Result")
+	Flash.BackgroundTransparency = special and 0.15 or 0.45
+	tween(Flash, 0.6, { BackgroundTransparency = 1 })
+	if special then shake(info.fx == 3 and 6 or 4) end
+
+	iconScale.Scale = 0
+	tween(iconScale, 0.34, { Scale = 1.18 }, Enum.EasingStyle.Back).Completed:Connect(function()
+		tween(iconScale, 0.2, { Scale = 1 }, Enum.EasingStyle.Sine)
+	end)
+	NameLbl.Position = UDim2.fromOffset(0, 116); NameLbl.TextTransparency = 1
+	tween(NameLbl, 0.45, { Position = UDim2.fromOffset(0, 104), TextTransparency = 0 }, Enum.EasingStyle.Back)
+	Badge.Position = UDim2.new(0.5, 0, 0, 142); Badge.BackgroundTransparency = 1; BadgeText.TextTransparency = 1
+	task.delay(0.12, function()
+		tween(Badge, 0.4, { Position = UDim2.new(0.5, 0, 0, 130), BackgroundTransparency = 0 }, Enum.EasingStyle.Back)
+		tween(BadgeText, 0.4, { TextTransparency = 0 })
+	end)
+
+	spawnShockwave(col)
+	if special then task.delay(0.15, function() spawnShockwave(C.gold) end) end
+	local n = 10 + info.fx * 5
+	for i = 1, n do
+		local a = (i / n) * math.pi * 2
+		spawnParticle((special and i % 3 == 0) and C.gold or col, ICON_X, ICON_Y,
+			math.cos(a) * math.random(50, 80), math.sin(a) * math.random(50, 80), 0.75)
+	end
+	task.delay(0.3, shineSweep)
+end
+
+------------------------------------------------------------------------
+-- CONNECT SHOP FRUIT DATA TO PREDICTOR UI
+------------------------------------------------------------------------
+local function buildFruitDataFromCandidate(cand)
+	local sprite = getFruitSprite(cand.DisplayName)
+	local rarityName = (cand.Rarity and cand.Rarity.Name) or "Common"
+	return {
+		name = cand.DisplayName,
+		rarity = rarityName,
+		icon = sprite and sprite.Image or cand.Image,
+		sprite = sprite,
+		source = "Dealer Gacha",
+	}
+end
+
+local function fetchShopPrediction(forceNewPick)
+	if forceNewPick or not nextSelectedFruit then
+		nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
+	end
+	if nextSelectedFruit then
+		return buildFruitDataFromCandidate(nextSelectedFruit), nil
+	end
+	return nil, "Couldn't read shop pool."
+end
+
+local function runPrediction(forceNewPick)
+	if not state.enabled or state.busy then return end
+	state.busy = true
+	state.token += 1
+	local my = state.token
+
+	clearFX()
+	setStatus("Scanning")
+	setButtonLoading(true)
+	showView("Scan")
+	ProgFill.Size = UDim2.fromScale(0, 1)
+	tween(ProgFill, CONFIG.ScanDuration, { Size = UDim2.fromScale(0.9, 1) }, Enum.EasingStyle.Sine)
+
+	local t0 = os.clock()
+	local res, err = fetchShopPrediction(forceNewPick)
+	local left = CONFIG.ScanDuration - (os.clock() - t0)
+	if left > 0 then task.wait(left) end
+	if not alive or my ~= state.token then return end
+	tween(ProgFill, 0.15, { Size = UDim2.fromScale(1, 1) })
+	task.wait(0.15)
+	if not alive or my ~= state.token then return end
+
+	if res then
+		if CONFIG.SpinAnimation and not spinReel(res, my) then return end
+		state.busy = false
+		setButtonLoading(false)
+		reveal(res); setStatus("Detected", res.rarity); stamp()
+		return
+	end
+	state.busy = false
+	setButtonLoading(false)
+	state.current = nil
+	showEmpty("Prediction Unavailable", err or "Error", "error")
+	setStatus("Error"); stamp("Last try failed")
+end
+
+onGachaRollFinished = function(newCandidate)
+	if alive and state.enabled and newCandidate then
+		local data = buildFruitDataFromCandidate(newCandidate)
+		reveal(data)
+		setStatus("Detected", data.rarity)
+		stamp("Next roll ready")
+	end
+end
+
+------------------------------------------------------------------------
+-- TOGGLES & QUICK BAR INTERACTIONS
+------------------------------------------------------------------------
+local function setEnabled(on)
+	state.enabled = on
+	tween(Knob, 0.3, { Position = on and UDim2.new(1, -18, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+		BackgroundColor3 = on and C.white or Color3.fromRGB(185, 192, 212) }, Enum.EasingStyle.Back)
+	switchGrad.Enabled = on
+	tween(Switch, 0.25, { BackgroundColor3 = on and C.white or C.off })
+	tween(toggleRowStroke, 0.25, { Color = on and C.cyan or C.line })
+	toggleSub.Text = on and "ON" or "OFF"
+	toggleSub.TextColor3 = on and C.cyan or C.sub
+	setButtonEnabled(on)
+	if on then
+		task.spawn(function() runPrediction(false) end)
+	else
+		state.token += 1
+		state.busy, state.current = false, nil
+		setButtonLoading(false)
+		showEmpty("No Fruit Detected", "Turn on the predictor to see the next shop fruit.")
+		setStatus("Waiting"); stamp("No data yet")
+	end
+end
+
+local function toggleGachaFlag(key)
+	gachaFlags[key] = not gachaFlags[key]
+	local isOn = gachaFlags[key]
+	if quickButtonRefs[key] then
+		quickButtonRefs[key](isOn)
+	end
+
+	if key == "boostLuck" then
+		nextSelectedFruit = pickCandidateFruit(isOn)
+		if state.enabled and nextSelectedFruit then
+			local data = buildFruitDataFromCandidate(nextSelectedFruit)
+			reveal(data)
+			setStatus("Detected", data.rarity)
+			stamp(isOn and "Boost Luck ON" or "Normal Pool")
+		end
+	end
+end
+
+bind(BoostLuckBtn.MouseButton1Click, function() toggleGachaFlag("boostLuck") end)
+bind(BypassTimeBtn.MouseButton1Click, function() toggleGachaFlag("bypassTime") end)
+bind(BypassMoneyBtn.MouseButton1Click, function() toggleGachaFlag("bypassCash") end)
+
+bind(ToggleHit.MouseButton1Click, function() setEnabled(not state.enabled) end)
+bind(ToggleHit.MouseEnter, function() tween(ToggleRow, 0.2, { BackgroundColor3 = Color3.fromRGB(36, 43, 68) }) end)
+bind(ToggleHit.MouseLeave, function() tween(ToggleRow, 0.2, { BackgroundColor3 = C.panel }) end)
+
+bind(RefreshBtn.MouseEnter, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -5) }) end)
+bind(RefreshBtn.MouseLeave, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -3) }) end)
+bind(RefreshBtn.MouseButton1Down, function() tween(RefreshBtn, 0.06, { Position = UDim2.fromOffset(0, 0) }) end)
+bind(RefreshBtn.MouseButton1Up, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -3) }, Enum.EasingStyle.Back) end)
+bind(RefreshBtn.MouseButton1Click, function()
+	if not state.enabled then
+		toggleRowStroke.Color = C.cyan
+		tween(ToggleRow, 0.08, { Position = UDim2.fromOffset(15, 8) }).Completed:Connect(function()
+			tween(ToggleRow, 0.35, { Position = UDim2.fromOffset(10, 8) }, Enum.EasingStyle.Elastic)
+			tween(toggleRowStroke, 0.6, { Color = C.line })
+		end)
+		return
+	end
+	task.spawn(function() runPrediction(true) end)
+end)
+
+local function headerHover(btn, s, hot)
+	bind(btn.MouseEnter, function() tween(btn, 0.18, { BackgroundColor3 = hot }); tween(s, 0.18, { Color = hot }) end)
+	bind(btn.MouseLeave, function() tween(btn, 0.18, { BackgroundColor3 = C.panel }); tween(s, 0.18, { Color = C.line }) end)
+end
+headerHover(MinBtn, minStroke, C.blue)
+headerHover(CloseBtn, closeStroke, C.red)
+
+bind(MinBtn.MouseButton1Click, function()
+	state.minimized = not state.minimized
+	MinBtn.Text = state.minimized and "+" or "–"
+	tween(Holder, 0.35, { Size = UDim2.fromOffset(W, state.minimized and HEADER or H) })
+end)
+
+local function destroy()
+	if not alive then return end
+	alive = false
+	for _, c in ipairs(conns) do c:Disconnect() end
+	if ENV.__FruitSpinPredictorDestroy == destroy then ENV.__FruitSpinPredictorDestroy = nil end
+	gui:Destroy()
+end
+ENV.__FruitSpinPredictorDestroy = destroy
+
+bind(CloseBtn.MouseButton1Click, function()
+	fadeAll(snapshot(Holder), false, 0.22)
+	tween(mainScale, 0.25, { Scale = 0.9 })
+	task.delay(0.27, destroy)
+end)
+
+bind(UIS.InputBegan, function(input, gp)
+	if not gp and input.KeyCode == CONFIG.ToggleKey then Holder.Visible = not Holder.Visible end
+end)
+
+local dragging, dragStart, startPos
+bind(Header.InputBegan, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		flag5 = true; position = input.Position; position2 = frame.Position
+		dragging, dragStart, startPos = true, input.Position, Holder.Position
+		local c; c = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then dragging = false; c:Disconnect() end
+		end)
+	end
+end)
+bind(UIS.InputChanged, function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local d = input.Position - dragStart
+		Holder.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
 	end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-	if flag5 and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local n3 = input.Position - position
-		frame.Position = UDim2.new(position2.X.Scale, position2.X.Offset + n3.X, position2.Y.Scale, position2.Y.Offset + n3.Y)
-	end
-end)
+local function rescale()
+	local cam = workspace.CurrentCamera
+	if not cam then return end
+	local vp = cam.ViewportSize
+	rootScale.Scale = math.clamp(math.min(vp.X / (W + 80), vp.Y / (H + 80)), 0.7, 1)
+end
+rescale()
+if workspace.CurrentCamera then bind(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), rescale) end
 
-UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then flag5 = false end
-end)
+------------------------------------------------------------------------
+-- BACKGROUND PRELOAD OF MYTHICAL FRUIT MODELS FROM INVENTORY
+------------------------------------------------------------------------
+task.spawn(function()
+	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local inv = getInventory()
+	local mythItems = {}
 
-local tbl15 = {}
-local tbl16 = { key = "boostLuck", label = "🍀 Boost Luck", color = Color3.fromRGB(80, 200, 80) }
-local tbl17 = { key = "bypassTime", label = "⏰ Bypass Waiting Time", color = Color3.fromRGB(80, 160, 255) }
-local tbl18 = { key = "bypassCash", label = "💰 Bypass Cash", color = Color3.fromRGB(255, 200, 50) }
-local tbl19_real = { key = "realMode", label = "🎁 inv fruits Mode", color = Color3.fromRGB(255, 100, 100) }
-local tbl20_show = { key = "showFruits", label = "👀 Show Fruits", color = Color3.fromRGB(180, 110, 255) }
-
-tbl15[1] = tbl16; tbl15[2] = tbl17; tbl15[3] = tbl18; tbl15[4] = tbl19_real; tbl15[5] = tbl20_show
-
-local frame3 = Instance.new("Frame")
-frame3.Size = UDim2.new(1, -20, 1, -48)
-frame3.Position = UDim2.new(0, 10, 0, 44)
-frame3.BackgroundTransparency = 1
-frame3.Parent = frame
-Instance.new("UIListLayout", frame3).Padding = UDim.new(0, 8)
-
-for _, v5 in ipairs(tbl15) do
-	local frame4 = Instance.new("Frame")
-	frame4.Size = UDim2.new(1, 0, 0, 38)
-	frame4.BackgroundColor3 = Color3.fromRGB(28, 28, 45)
-	frame4.BorderSizePixel = 0
-	frame4.Parent = frame3
-	Instance.new("UICorner", frame4).CornerRadius = UDim.new(0, 8)
-	local textLabel2 = Instance.new("TextLabel")
-	textLabel2.Size = UDim2.new(1, -60, 1, 0)
-	textLabel2.Position = UDim2.new(0, 12, 0, 0)
-	textLabel2.BackgroundTransparency = 1
-	textLabel2.Text = v5.label
-	textLabel2.TextColor3 = Color3.fromRGB(210, 210, 210)
-	textLabel2.Font = Enum.Font.Gotham
-	textLabel2.TextSize = 13
-	textLabel2.TextXAlignment = Enum.TextXAlignment.Left
-	textLabel2.Parent = frame4
-	local textButton = Instance.new("TextButton")
-	textButton.Size = UDim2.new(0, 46, 0, 26)
-	textButton.AnchorPoint = Vector2.new(1, 0.5)
-	textButton.Position = UDim2.new(1, -10, 0.5, 0)
-	textButton.BackgroundColor3 = Color3.fromRGB(55, 55, 75)
-	textButton.BorderSizePixel = 0
-	textButton.Text = ""
-	textButton.Parent = frame4
-	Instance.new("UICorner", textButton).CornerRadius = UDim.new(1, 0)
-	local frame5 = Instance.new("Frame")
-	frame5.Size = UDim2.new(0, 20, 0, 20)
-	frame5.AnchorPoint = Vector2.new(0, 0.5)
-	frame5.Position = UDim2.new(0, 3, 0.5, 0)
-	frame5.BackgroundColor3 = Color3.fromRGB(160, 160, 160)
-	frame5.BorderSizePixel = 0
-	frame5.Parent = textButton
-	Instance.new("UICorner", frame5).CornerRadius = UDim.new(1, 0)
-
-	local function fn30(arg)
-		tbl2[v5.key] = arg
-		TweenService:Create(textButton, TweenInfo.new(0.15), { BackgroundColor3 = arg and v5.color or Color3.fromRGB(55, 55, 75) }):Play()
-		TweenService:Create(frame5, TweenInfo.new(0.15), {
-			Position = arg and UDim2.new(1, -23, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
-			BackgroundColor3 = arg and Color3.new(1, 1, 1) or Color3.fromRGB(160, 160, 160),
-		}):Play()
-
-		if v5.key == "boostLuck" then
-			nextSelectedFruit = pickCandidateFruit(arg)
-			if tbl2.showFruits then
-				renderFruitPreview(nextSelectedFruit)
-			end
-		elseif v5.key == "showFruits" then
-			if arg then
-				if not nextSelectedFruit then
-					nextSelectedFruit = pickCandidateFruit(tbl2.boostLuck)
-				end
-				renderFruitPreview(nextSelectedFruit)
-				startDealerWatchLoop()
-			else
-				clearFruitPreview()
-			end
+	for _, item in pairs(inv) do
+		if item.Type == "Blox Fruit" and (item.Rarity or 0) == 4 then
+			table.insert(mythItems, item)
 		end
 	end
 
-	textButton.Activated:Connect(function() fn30(not tbl2[v5.key]) end)
-end
-
-local screenGui2 = Instance.new("ScreenGui")
-screenGui2.Name = "X10LoadingUI"
-screenGui2.ResetOnSpawn = false
-screenGui2.DisplayOrder = 1000
-screenGui2.IgnoreGuiInset = true
-screenGui2.Parent = playerGui
-local frame4 = Instance.new("Frame")
-frame4.Size = UDim2.fromScale(1, 1)
-frame4.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
-frame4.BackgroundTransparency = 0.25
-frame4.BorderSizePixel = 0
-frame4.Parent = screenGui2
-local frame5 = Instance.new("Frame")
-frame5.Size = UDim2.new(0, 300, 0, 88)
-frame5.AnchorPoint = Vector2.new(0.5, 0.5)
-frame5.Position = UDim2.new(0.5, 0, 0.5, 0)
-frame5.BackgroundColor3 = Color3.fromRGB(15, 17, 22)
-frame5.BorderSizePixel = 0
-frame5.Parent = frame4
-Instance.new("UICorner", frame5).CornerRadius = UDim.new(0, 12)
-local uiStroke2 = Instance.new("UIStroke", frame5)
-uiStroke2.Color = Color3.fromRGB(42, 45, 54)
-uiStroke2.Thickness = 1
-local textLabel2 = Instance.new("TextLabel")
-textLabel2.Size = UDim2.new(1, -32, 0, 18)
-textLabel2.Position = UDim2.new(0, 16, 0, 14)
-textLabel2.BackgroundTransparency = 1
-textLabel2.Text = "Loading fruit models"
-textLabel2.TextColor3 = Color3.fromRGB(242, 244, 247)
-textLabel2.Font = Enum.Font.Gotham
-textLabel2.TextSize = 13
-textLabel2.TextXAlignment = Enum.TextXAlignment.Left
-textLabel2.Parent = frame5
-local frame6 = Instance.new("Frame")
-frame6.Size = UDim2.new(1, -32, 0, 4)
-frame6.Position = UDim2.new(0, 16, 0, 42)
-frame6.BackgroundColor3 = Color3.fromRGB(42, 45, 54)
-frame6.BorderSizePixel = 0
-frame6.Parent = frame5
-Instance.new("UICorner", frame6).CornerRadius = UDim.new(1, 0)
-local frame7 = Instance.new("Frame")
-frame7.Size = UDim2.fromScale(0, 1)
-frame7.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
-frame7.BorderSizePixel = 0
-frame7.Parent = frame6
-Instance.new("UICorner", frame7).CornerRadius = UDim.new(1, 0)
-local textLabel3 = Instance.new("TextLabel")
-textLabel3.Size = UDim2.new(1, -32, 0, 16)
-textLabel3.Position = UDim2.new(0, 16, 0, 56)
-textLabel3.BackgroundTransparency = 1
-textLabel3.Text = "Please wait..."
-textLabel3.TextColor3 = Color3.fromRGB(139, 147, 161)
-textLabel3.Font = Enum.Font.Gotham
-textLabel3.TextSize = 11
-textLabel3.TextXAlignment = Enum.TextXAlignment.Left
-textLabel3.Parent = frame5
-
-for _, v5 in ipairs({ localPlayer.Backpack, localPlayer.Character }) do
-	for _, child in ipairs(v5:GetChildren()) do
-		if child:IsA("Tool") and child:GetAttribute("X10Fake") then child:Destroy() end
-	end
-end
-
-task.spawn(function()
-	local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-	local v5 = fn12()
-	local tbl19 = {}
-
-	for _, v6 in pairs(v5) do
-		local flag6 = v6.Type == "Blox Fruit"
-		if flag6 then flag6 = (v6.Rarity or 0) == 4 end
-		if flag6 then table.insert(tbl19, v6) end
-	end
-
-	local n3 = #tbl19
-	textLabel2.Text = "Syncing inventory data..."
-	textLabel3.Text = string.format("Found %d items to process", n3)
-
-	for i, v6 in ipairs(tbl19) do
-		local name = v6.Name or v6.DisplayName .. "-" .. v6.DisplayName
-		local displayName = v6.DisplayName or name
-		textLabel2.Text = string.format("Loading fruit models  %d/%d", i, n3)
-		textLabel3.Text = "Models only, your items stay safe."
-		TweenService:Create(frame7, TweenInfo.new(0.2), { Size = UDim2.fromScale((i - 1) / n3, 1) }):Play()
-
+	for _, item in ipairs(mythItems) do
+		local name = item.Name or (item.DisplayName .. "-" .. item.DisplayName)
+		local displayName = item.DisplayName or name
 		if replicatedFruits:FindFirstChild(name) then
-			tbl10[name] = true
+			loadedModelFlags[name] = true
 		else
 			pcall(function() commF:InvokeServer("LoadFruit", name) end)
-			local v7 = nil
+			local toolFound = nil
 			local now = tick()
 			while tick() - now < 3 do
-				local v8 = localPlayer.Backpack:FindFirstChild(displayName .. " Fruit") or localPlayer.Backpack:FindFirstChild(v6.Name .. " Fruit")
-				if v8 then v7 = v8; break else task.wait(0.1) end
+				local found = LocalPlayer.Backpack:FindFirstChild(displayName .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(item.Name .. " Fruit")
+				if found then toolFound = found; break else task.wait(0.1) end
 			end
 
-			if v7 then
-				local clone = v7:Clone()
+			if toolFound then
+				local clone = toolFound:Clone()
 				clone.Name = name
 				clone.Parent = replicatedFruits
-				tbl10[name] = true
+				loadedModelFlags[name] = true
 				pcall(function()
 					local humanoid = character:FindFirstChildWhichIsA("Humanoid")
 					if humanoid then
-						humanoid:EquipTool(v7)
+						humanoid:EquipTool(toolFound)
 						task.wait(1)
-						local v8 = workspace.Characters:FindFirstChild(localPlayer.Name)
-						if v8 then v8 = v8:FindFirstChild(displayName .. " Fruit") or v8:FindFirstChild(v6.Name .. " Fruit") end
-						if v8 then
-							local clone2 = v8:Clone()
+						local charModel = workspace.Characters:FindFirstChild(LocalPlayer.Name)
+						if charModel then
+							charModel = charModel:FindFirstChild(displayName .. " Fruit") or charModel:FindFirstChild(item.Name .. " Fruit")
+						end
+						if charModel then
+							local clone2 = charModel:Clone()
 							clone2.Name = name
 							local fruit = clone2:FindFirstChild("Fruit")
 							local rootPart = fruit and fruit:FindFirstChild("RootPart")
@@ -1124,8 +1610,8 @@ task.spawn(function()
 									end
 								end
 							end
-							tbl11[name] = clone2
-							commF:InvokeServer("StoreFruit", name, v8)
+							cachedFruitModels[name] = clone2
+							commF:InvokeServer("StoreFruit", name, charModel)
 						end
 					end
 				end)
@@ -1134,14 +1620,105 @@ task.spawn(function()
 		end
 	end
 
-	for i = #tbl9, 1, -1 do tbl9[i] = nil end
-	for _, v6 in ipairs(tbl7) do
-		if tbl10[v6.StorageName] then table.insert(tbl9, v6) end
+	for i = #ownedMythPool, 1, -1 do ownedMythPool[i] = nil end
+	for _, mFruit in ipairs(mythicalFruits) do
+		if loadedModelFlags[mFruit.StorageName] then
+			table.insert(ownedMythPool, mFruit)
+		end
+	end
+end)
+
+------------------------------------------------------------------------
+-- ANIMATION LOOP
+------------------------------------------------------------------------
+local T, partAcc, starAcc, boltAcc, shineAcc, waveAcc = 0, 0, 0, 0, 0, 0
+bind(RunService.Heartbeat, function(dt)
+	T += dt
+	borderGrad.Rotation = (T * 55) % 360
+	local wave = math.sin(T * 1.4)
+	brandGrad.Offset = Vector2.new(wave * 0.35, 0)
+	footerGrad.Offset = Vector2.new(-wave * 0.35, 0)
+	if state.enabled then refreshGrad.Offset = Vector2.new(math.sin(T * 1.2) * 0.25, 0) end
+	headFruit.body.Rotation = math.sin(T * 2) * 8
+
+	for _, L in ipairs(waves) do
+		local span = #L.dots * L.gap
+		for i, d in ipairs(L.dots) do
+			local x = ((i - 1) * L.gap + T * L.sp) % span - L.gap
+			local edge = math.clamp(math.min(x, CARD_W - x) / 26, 0, 1)
+			d.Position = UDim2.fromOffset(x, L.y + math.sin(T * 2.2 + i * 0.9 + L.ph) * 2.5)
+			d.BackgroundTransparency = 1 - (1 - L.tr) * edge
+		end
 	end
 
-	warn("[X10Lucky] MYTH pool:", #tbl9, "entries")
-	flag3 = true
-	screenGui2:Destroy()
-	screenGui.Enabled = true
-	warn("[X10Lucky] Preload done:", n3, "mythicals")
+	if state.status == "Scanning" then
+		RadarSweep.Rotation = (T * 300) % 360
+		ScanLine.Position = UDim2.new(0, 0, (T * 0.85) % 1.1, 0)
+		Spinner.Rotation = (T * 540) % 360
+		StatusDot.BackgroundTransparency = 0.5 + 0.5 * math.sin(T * 10)
+	end
+
+	local col = state.fx
+	if col then
+		local s = math.sin(T * 3)
+		GlowRing.BackgroundTransparency = 0.8 + 0.08 * s
+		ringStroke.Transparency = 0.15 + 0.25 * s
+		glowScale.Scale = 1 + 0.05 * s
+		haloScale.Scale = 1 + 0.08 * math.sin(T * 2)
+		cardStroke.Transparency = 0.15 + 0.2 * s
+		bigFruit.body.Rotation = math.sin(T * 1.6) * 6
+
+		if state.rays then
+			local lvl = state.fxLevel
+			local baseT = (lvl == 1 and 0.75) or (lvl == 2 and 0.5) or 0.35
+			for i, r in ipairs(rays) do
+				local a = math.rad(i * (360 / #rays) + T * (lvl == 3 and 40 or 25))
+				local rad = 46 + math.sin(T * 3 + i) * 3
+				r.Position = UDim2.fromOffset(ICON_X + math.sin(a) * rad, ICON_Y - math.cos(a) * rad)
+				r.Rotation = math.deg(a)
+				r.BackgroundTransparency = baseT + 0.15 * math.sin(T * 4 + i)
+			end
+		end
+
+		local lvl = state.fxLevel
+		if lvl >= 2 then
+			partAcc += dt
+			if partAcc > (lvl == 3 and 0.08 or 0.14) then
+				partAcc = 0
+				spawnParticle((lvl == 3 and math.random() < 0.35) and C.gold or col)
+			end
+			waveAcc += dt
+			if waveAcc > (lvl == 3 and 1.4 or 2.2) then waveAcc = 0; spawnShockwave(col) end
+		end
+		if lvl >= 1 then
+			starAcc += dt
+			if starAcc > (lvl == 3 and 0.3 or lvl == 2 and 0.5 or 1.1) then
+				starAcc = 0
+				spawnStar(lvl >= 2 and C.gold or col)
+			end
+		end
+		if lvl == 3 then
+			boltAcc += dt
+			if boltAcc > 2 then boltAcc = math.random() * 0.8; spawnLightning(col) end
+		end
+		shineAcc += dt
+		if shineAcc > 3.4 then shineAcc = 0; shineSweep() end
+	end
 end)
+
+------------------------------------------------------------------------
+-- OPEN ANIMATION
+------------------------------------------------------------------------
+nextSelectedFruit = pickCandidateFruit(false)
+showEmpty("No Fruit Detected", "Turn on the predictor to see the next shop fruit.")
+setButtonEnabled(false)
+
+fadeAll(snapshot(Holder), true, 0.45)
+local stagger = { ToggleRow, QuickBar, StatusChip, UpdatedLbl, Card, BtnBase, FooterBrand }
+for i, obj in ipairs(stagger) do
+	local target = obj.Position
+	obj.Position = target + UDim2.fromOffset(0, 12)
+	task.delay(0.1 + i * 0.05, function() if obj.Parent then tween(obj, 0.45, { Position = target }) end end)
+end
+tween(Holder, 0.5, { Position = UDim2.fromScale(0.5, 0.5) })
+tween(mainScale, 0.5, { Scale = 1 }, Enum.EasingStyle.Back)
