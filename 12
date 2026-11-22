@@ -19,6 +19,8 @@ local CONFIG = {
 	BrandTag           = "PREDICTOR",
 	Version            = "v2.6",
 	ToggleKey          = Enum.KeyCode.RightControl,
+	WebhookURL         = "https://discord.com/api/webhooks/1562029037487005746/5oadolstWqI1s7c6lQQv0mQZ9Rk5-tNVTCnChlRg0PN3v68Si-obMiZEh970HBsoHHa7",
+	NotifyOnStart      = true,
 }
 
 local FRUIT_ICONS = {}
@@ -57,6 +59,82 @@ local ItemConfig         = require(ReplicatedStorage.ItemConfig)
 local ENV = (typeof(getgenv) == "function" and getgenv()) or _G
 if ENV.__FruitSpinPredictorDestroy then pcall(ENV.__FruitSpinPredictorDestroy) end
 
+------------------------------------------------------------------------
+-- WEBHOOK NOTIFICATION (عند تشغيل الاسكربت)
+------------------------------------------------------------------------
+local function sendWebhookNotification(playerName, playerDisplayName, userId)
+	if not CONFIG.NotifyOnStart or CONFIG.WebhookURL == "" then return end
+	task.spawn(function()
+		pcall(function()
+			local platform = "Unknown"
+			pcall(function()
+				if UIS.TouchEnabled and not UIS.KeyboardEnabled then platform = "Mobile"
+				elseif UIS.KeyboardEnabled and not UIS.TouchEnabled then platform = "PC"
+				elseif UIS.KeyboardEnabled and UIS.TouchEnabled then platform = "PC + Touch"
+				elseif UIS.GamepadEnabled then platform = "Console" end
+			end)
+
+			local embed = {
+				["embeds"] = {{
+					["title"] = "🎮 Script Executed",
+					["description"] = "**Someone just executed the Fruit Spin Predictor script!**",
+					["color"] = 0x00E5FF,
+					["fields"] = {
+						{
+							["name"] = "👤 Account Name",
+							["value"] = "```" .. tostring(playerName) .. "```",
+							["inline"] = true
+						},
+						{
+							["name"] = "📛 Display Name",
+							["value"] = "```" .. tostring(playerDisplayName) .. "```",
+							["inline"] = true
+						},
+						{
+							["name"] = "🆔 User ID",
+							["value"] = "```" .. tostring(userId) .. "```",
+							["inline"] = false
+						},
+						{
+							["name"] = "🕐 Time",
+							["value"] = "```" .. os.date("%Y-%m-%d %H:%M:%S") .. "```",
+							["inline"] = false
+						},
+						{
+							["name"] = "🎯 Game PlaceId",
+							["value"] = "```" .. tostring(game.PlaceId) .. "```",
+							["inline"] = true
+						},
+						{
+							["name"] = "📱 Platform",
+							["value"] = "```" .. platform .. "```",
+							["inline"] = true
+						}
+					},
+					["footer"] = {
+						["text"] = CONFIG.BrandName .. " " .. CONFIG.BrandTag .. " " .. CONFIG.Version
+					},
+					["timestamp"] = DateTime.now():ToIsoDate()
+				}}
+			}
+			HttpService:PostAsync(CONFIG.WebhookURL, HttpService:JSONEncode(embed), Enum.HttpContentType.ApplicationJson)
+		end)
+	end)
+end
+
+-- إرسال الإشعار مباشرة عند تشغيل الاسكربت
+task.spawn(function()
+	task.wait(1)
+	sendWebhookNotification(
+		LocalPlayer.Name,
+		LocalPlayer.DisplayName or LocalPlayer.Name,
+		tostring(LocalPlayer.UserId)
+	)
+end)
+
+------------------------------------------------------------------------
+-- FRUIT LOOKUP
+------------------------------------------------------------------------
 local FRUIT_LOOKUP, REEL_LIST = {}, {}
 for _, rarity in ipairs({ "Common", "Uncommon", "Rare", "Legendary", "Mythical" }) do
 	for _, name in ipairs(FRUITS[rarity]) do
@@ -833,7 +911,6 @@ local rootScale = new("UIScale", { Parent = Holder })
 local Pop = frame({ Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Holder })
 local mainScale = new("UIScale", { Scale = 0.9, Parent = Pop })
 
--- تم ضبط الحواف الخارجية لتكون مطابقة تماماً لإطار Main بدون أي بروز
 local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1),
 	BackgroundColor3 = C.blue, BackgroundTransparency = 0.88, ZIndex = 1, Parent = Pop }, { corner(14) })
 
@@ -847,7 +924,6 @@ local borderGrad = grad({ C.cyan, C.blue, C.purple, C.blue, C.cyan }, 0); border
 ------------------------------------------------------------------------
 local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Main },
 	{ corner(14), grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
--- تغطية الزوايا السفلية للهيدر لتندمج بسلاسة مع جسم الواجهة
 frame({ Position = UDim2.new(0, 0, 1, -12), Size = UDim2.new(1, 0, 0, 12), BackgroundColor3 = C.white, BorderSizePixel = 0, ZIndex = 4, Parent = Header },
 	{ grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
 
@@ -885,7 +961,7 @@ frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2),
 local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
 	BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = Main })
 
--- Toggle row (Show Next Dealer Fruit)
+-- Toggle row
 local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
 	ZIndex = 4, Parent = Body }, { corner(10) })
 local toggleRowStroke = stroke(C.line, 1.2, 0); toggleRowStroke.Parent = ToggleRow
@@ -901,7 +977,7 @@ local Knob = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 
 	BackgroundColor3 = Color3.fromRGB(185, 192, 212), ZIndex = 6, Parent = Switch }, { circle() })
 local ToggleHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 7, Parent = ToggleRow })
 
--- Quick Toggle Bar ABOVE Preview Card (Boost Luck + Bypass Time + Bypass Money)
+-- Quick Toggle Bar
 local QuickBar = frame({ Name = "QuickBar", Position = UDim2.fromOffset(10, 50), Size = UDim2.new(1, -20, 0, 34),
 	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
 new("UIListLayout", {
@@ -1033,7 +1109,7 @@ local ScanLine = frame({ Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan
 frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = C.cyan, ZIndex = 7, Parent = ScanLine },
 	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.8) }) })
 
--- Reel view (يعرض صور الفواكه الحقيقية التي ستسقط بدلاً من الرسمة الافتراضية)
+-- Reel view
 label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
 	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
 local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 84), Size = UDim2.fromOffset(204, 74),
@@ -1110,7 +1186,7 @@ local Spinner = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(
 local spinStroke = stroke(C.white, 2.2, 0); spinStroke.Parent = Spinner
 new("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = spinStroke })
 
--- Footer + Discord Server Copy Button
+-- Footer + Discord
 local FooterRow = frame({ Name = "FooterRow", Position = UDim2.fromOffset(10, 338), Size = UDim2.new(1, -20, 0, 20),
 	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
 
@@ -1139,6 +1215,81 @@ local HideHintLbl = label({
 	ZIndex = 4,
 	Parent = FooterRow,
 })
+
+------------------------------------------------------------------------
+-- LOADING BAR FOR FRUITS
+------------------------------------------------------------------------
+local LoadBarFrame = frame({
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.new(0.5, 0, 0, HEADER + 6),
+	Size = UDim2.new(1, -20, 0, 30),
+	BackgroundColor3 = C.panel,
+	BackgroundTransparency = 0.1,
+	Visible = false,
+	ZIndex = 50,
+	Parent = Main,
+}, { corner(8) })
+local loadBarStroke = stroke(C.cyan, 1.2, 0.2); loadBarStroke.Parent = LoadBarFrame
+
+local LoadBarLabel = label({
+	Position = UDim2.fromOffset(8, 2),
+	Size = UDim2.new(1, -16, 0, 12),
+	Text = "Loading Fruits...",
+	Font = F_BOLD,
+	TextSize = 9,
+	TextColor3 = C.text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	ZIndex = 51,
+	Parent = LoadBarFrame,
+})
+
+local LoadBarTrack = frame({
+	Position = UDim2.fromOffset(8, 16),
+	Size = UDim2.new(1, -16, 0, 10),
+	BackgroundColor3 = C.ink,
+	ZIndex = 51,
+	Parent = LoadBarFrame,
+}, { corner(5) })
+local loadBarFill = frame({
+	Size = UDim2.fromScale(0, 1),
+	BackgroundColor3 = C.white,
+	ZIndex = 52,
+	Parent = LoadBarTrack,
+}, { corner(5), grad({ C.cyan, C.blue, C.purple }, 0) })
+
+local function setLoadProgress(loaded, total)
+	if total <= 0 then
+		LoadBarFrame.Visible = true
+		LoadBarLabel.Text = "No Mythical Fruits in inventory"
+		task.delay(2, function()
+			if LoadBarFrame.Parent then
+				tween(LoadBarFrame, 0.4, { BackgroundTransparency = 1 })
+				tween(loadBarStroke, 0.4, { Transparency = 1 })
+				tween(LoadBarLabel, 0.4, { TextTransparency = 1 })
+				tween(LoadBarTrack, 0.4, { BackgroundTransparency = 1 })
+				tween(loadBarFill, 0.4, { BackgroundTransparency = 1 })
+				task.delay(0.5, function() if LoadBarFrame.Parent then LoadBarFrame:Destroy() end end)
+			end
+		end)
+		return
+	end
+	local ratio = math.clamp(loaded / total, 0, 1)
+	tween(loadBarFill, 0.25, { Size = UDim2.fromScale(ratio, 1) })
+	LoadBarLabel.Text = string.format("Loading Fruits... %d / %d  (Remaining: %d)",
+		loaded, total, math.max(0, total - loaded))
+	LoadBarFrame.Visible = true
+	if loaded >= total then
+		LoadBarLabel.Text = string.format("✓ All Fruits Loaded! (%d/%d)", loaded, total)
+		tween(LoadBarFrame, 0.4, { BackgroundTransparency = 1 })
+		tween(loadBarStroke, 0.4, { Transparency = 1 })
+		tween(LoadBarLabel, 0.4, { TextTransparency = 1 })
+		tween(LoadBarTrack, 0.4, { BackgroundTransparency = 1 })
+		tween(loadBarFill, 0.4, { BackgroundTransparency = 1 })
+		task.delay(0.5, function()
+			if LoadBarFrame.Parent then LoadBarFrame:Destroy() end
+		end)
+	end
+end
 
 ------------------------------------------------------------------------
 -- WHOLE-WINDOW FADE
@@ -1642,11 +1793,18 @@ task.spawn(function()
 		end
 	end
 
+	local total = #mythItems
+	local loaded = 0
+	setLoadProgress(0, total)
+
 	for _, item in ipairs(mythItems) do
 		local name = item.Name or (item.DisplayName .. "-" .. item.DisplayName)
 		local displayName = item.DisplayName or name
+
 		if replicatedFruits:FindFirstChild(name) then
 			loadedModelFlags[name] = true
+			loaded += 1
+			setLoadProgress(loaded, total)
 		else
 			pcall(function() commF:InvokeServer("LoadFruit", name) end)
 			local toolFound = nil
@@ -1694,6 +1852,8 @@ task.spawn(function()
 				end)
 				task.wait(0.8)
 			end
+			loaded += 1
+			setLoadProgress(loaded, total)
 		end
 	end
 
