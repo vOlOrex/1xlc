@@ -1,8 +1,4 @@
-Script One, Delta-Patched
 
-الاسكريبت الأول اتفحص سطر بسطر مع الثاني. "Same fix, boss man — pulled every working pattern from script two and wired it in."
-
-```lua
 --[[
     Fruit Spin Predictor  •  Blox Fruits UI  (Delta Edition)
     Discord: https://discord.gg/V7DYYebjHD
@@ -1504,4 +1500,4 @@ for i, obj in ipairs(stagger) do
 	task.delay(0.1+i*0.05,function() if obj.Parent then tween(obj,0.45,{Position=target}) end end)
 end
 tween(Holder,0.5,{Position=UDim2.fromScale(0.5,0.5)}); tween(mainScale,0.5,{Scale=1},Enum.EasingStyle.Back)
-```
+
