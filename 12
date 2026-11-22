@@ -1,5 +1,6 @@
 --[[
     Fruit Spin Predictor  •  Blox Fruits UI  (Merged Edition)
+    Discord: https://discord.gg/V7DYYebjHD
     ------------------------------------------------------------------
     RightControl hides / shows the window.
 ]]
@@ -9,13 +10,14 @@
 ------------------------------------------------------------------------
 local CONFIG = {
 	PredictionURL      = "",
+	DiscordInvite      = "https://discord.gg/V7DYYebjHD",
 	AutoRefreshSeconds = 30,
 	ScanDuration       = 0.8,
 	SpinAnimation      = true,
 	RequestTimeout     = 10,
 	BrandName          = "FRUIT SPIN",
 	BrandTag           = "PREDICTOR",
-	Version            = "v2.5",
+	Version            = "v2.6",
 	ToggleKey          = Enum.KeyCode.RightControl,
 }
 
@@ -154,19 +156,28 @@ local RARITY_COLORS = {
 	Color3.fromRGB(255, 50, 50),
 }
 
+local spriteCache = {}
 local function getFruitSprite(arg)
+	if spriteCache[arg] ~= nil then
+		return spriteCache[arg] or nil
+	end
 	local str3 = arg .. "-" .. arg
 	local ok3, result3 = pcall(function()
 		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
 	end)
-	if not ok3 or not result3 then return nil end
+	if not ok3 or not result3 then
+		spriteCache[arg] = false
+		return nil
+	end
 	local itemId = type(result3) == "table" and (result3.ItemId or result3.Id) or result3
 	local ok4, result4 = pcall(function()
 		return ItemConfig.tryGet(itemId)
 	end)
 	if ok4 and type(result4) == "table" and result4.Display and result4.Display.Sprite then
+		spriteCache[arg] = result4.Display.Sprite
 		return result4.Display.Sprite
 	end
+	spriteCache[arg] = false
 	return nil
 end
 
@@ -693,23 +704,24 @@ end
 -- THEME
 ------------------------------------------------------------------------
 local C = {
-	bg0    = Color3.fromRGB(8, 10, 18),
-	bg1    = Color3.fromRGB(18, 22, 38),
-	sea    = Color3.fromRGB(10, 36, 70),
-	panel  = Color3.fromRGB(26, 31, 50),
-	line   = Color3.fromRGB(60, 70, 104),
-	text   = Color3.fromRGB(244, 247, 255),
-	sub    = Color3.fromRGB(150, 162, 195),
-	cyan   = Color3.fromRGB(0, 229, 255),
-	blue   = Color3.fromRGB(41, 121, 255),
-	purple = Color3.fromRGB(168, 82, 255),
-	red    = Color3.fromRGB(255, 70, 90),
-	gold   = Color3.fromRGB(255, 205, 70),
-	green  = Color3.fromRGB(50, 210, 100),
-	gray   = Color3.fromRGB(140, 148, 170),
-	off    = Color3.fromRGB(50, 56, 80),
-	ink    = Color3.fromRGB(6, 8, 16),
-	white  = Color3.new(1, 1, 1),
+	bg0     = Color3.fromRGB(8, 10, 18),
+	bg1     = Color3.fromRGB(18, 22, 38),
+	sea     = Color3.fromRGB(10, 36, 70),
+	panel   = Color3.fromRGB(26, 31, 50),
+	line    = Color3.fromRGB(60, 70, 104),
+	text    = Color3.fromRGB(244, 247, 255),
+	sub     = Color3.fromRGB(150, 162, 195),
+	cyan    = Color3.fromRGB(0, 229, 255),
+	blue    = Color3.fromRGB(41, 121, 255),
+	purple  = Color3.fromRGB(168, 82, 255),
+	discord = Color3.fromRGB(88, 101, 242),
+	red     = Color3.fromRGB(255, 70, 90),
+	gold    = Color3.fromRGB(255, 205, 70),
+	green   = Color3.fromRGB(50, 210, 100),
+	gray    = Color3.fromRGB(140, 148, 170),
+	off     = Color3.fromRGB(50, 56, 80),
+	ink     = Color3.fromRGB(6, 8, 16),
+	white   = Color3.new(1, 1, 1),
 }
 
 local RARITY = {
@@ -803,7 +815,7 @@ local function paintFruit(f, rarity)
 end
 
 ------------------------------------------------------------------------
--- SCREEN GUI
+-- SCREEN GUI (Clean Edges - No Protruding Outlines)
 ------------------------------------------------------------------------
 local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false, IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999 })
@@ -812,19 +824,18 @@ if typeof(gethui) == "function" then parented = pcall(function() gui.Parent = ge
 if not parented then parented = pcall(function() gui.Parent = game:GetService("CoreGui") end) end
 if not parented then gui.Parent = playerGui end
 
-local W, H, HEADER = 276, 396, 42
+local W, H, HEADER = 276, 404, 42
 local CARD_W, CARD_H = W - 20, 174
 
 local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 24),
-	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, Parent = gui })
+	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ClipsDescendants = false, Parent = gui })
 local rootScale = new("UIScale", { Parent = Holder })
 local Pop = frame({ Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Holder })
 local mainScale = new("UIScale", { Scale = 0.9, Parent = Pop })
 
-frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 6), Size = UDim2.new(1, 18, 1, 18),
-	BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.65, ZIndex = 1, Parent = Pop }, { corner(22) })
-local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 8, 1, 8),
-	BackgroundColor3 = C.blue, BackgroundTransparency = 0.8, ZIndex = 1, Parent = Pop }, { corner(18) })
+-- تم ضبط الحواف الخارجية لتكون مطابقة تماماً لإطار Main بدون أي بروز
+local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1),
+	BackgroundColor3 = C.blue, BackgroundTransparency = 0.88, ZIndex = 1, Parent = Pop }, { corner(14) })
 
 local Main = frame({ Name = "Main", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.white, ClipsDescendants = true,
 	ZIndex = 2, Parent = Pop }, { corner(14), grad({ C.bg1, C.bg0, C.sea }, 100) })
@@ -834,7 +845,10 @@ local borderGrad = grad({ C.cyan, C.blue, C.purple, C.blue, C.cyan }, 0); border
 ------------------------------------------------------------------------
 -- HEADER
 ------------------------------------------------------------------------
-local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ZIndex = 4, Parent = Main },
+local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Main },
+	{ corner(14), grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
+-- تغطية الزوايا السفلية للهيدر لتندمج بسلاسة مع جسم الواجهة
+frame({ Position = UDim2.new(0, 0, 1, -12), Size = UDim2.new(1, 0, 0, 12), BackgroundColor3 = C.white, BorderSizePixel = 0, ZIndex = 4, Parent = Header },
 	{ grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
 
 local headIcon = frame({ Position = UDim2.fromOffset(9, 7), Size = UDim2.fromOffset(28, 28), BackgroundColor3 = C.panel,
@@ -869,7 +883,7 @@ frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2),
 -- BODY
 ------------------------------------------------------------------------
 local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
-	BackgroundTransparency = 1, ZIndex = 3, Parent = Main })
+	BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = Main })
 
 -- Toggle row (Show Next Dealer Fruit)
 local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
@@ -1019,20 +1033,25 @@ local ScanLine = frame({ Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan
 frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = C.cyan, ZIndex = 7, Parent = ScanLine },
 	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.8) }) })
 
--- Reel view
+-- Reel view (يعرض صور الفواكه الحقيقية التي ستسقط بدلاً من الرسمة الافتراضية)
 label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
 	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
-local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 82), Size = UDim2.fromOffset(196, 74),
-	BackgroundColor3 = C.ink, ZIndex = 6, Parent = ReelView }, { corner(12) })
+local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 84), Size = UDim2.fromOffset(204, 74),
+	BackgroundColor3 = C.ink, ClipsDescendants = true, ZIndex = 6, Parent = ReelView }, { corner(12) })
 local slotStroke = stroke(C.gold, 2, 0); slotStroke.Parent = Slot
 local slotScale = new("UIScale", { Parent = Slot })
 for _, side in ipairs({ -1, 1 }) do
-	label({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5 + side * 0.58, 0, 0.5, 0), Size = UDim2.fromOffset(14, 20),
-		Text = side < 0 and ">" or "<", Font = F_TITLE, TextSize = 20, TextColor3 = C.gold, ZIndex = 7, Parent = Slot }, { textStroke(C.ink, 1.5) })
+	label({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5 + side * 0.44, 0, 0.5, 0), Size = UDim2.fromOffset(14, 20),
+		Text = side < 0 and ">" or "<", Font = F_TITLE, TextSize = 18, TextColor3 = C.gold, ZIndex = 9, Parent = Slot }, { textStroke(C.ink, 1.5) })
 end
-local reelFruit = makeFruit(Slot, 40, 8, UDim2.new(0, 36, 0.5, 2))
-local ReelName = label({ Position = UDim2.fromOffset(66, 0), Size = UDim2.new(1, -72, 1, 0), Text = "", Font = F_TITLE,
-	TextSize = 20, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
+local ReelIconBox = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 22, 0.5, 0), Size = UDim2.fromOffset(48, 48),
+	BackgroundColor3 = C.panel, ZIndex = 7, Parent = Slot }, { corner(10) })
+local reelIconStroke = stroke(C.line, 1.5, 0.2); reelIconStroke.Parent = ReelIconBox
+local ReelImage = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.86, 0.86),
+	BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, Image = "", Visible = false, ZIndex = 8, Parent = ReelIconBox })
+local reelFruitFallback = makeFruit(ReelIconBox, 36, 8, UDim2.new(0.5, 0, 0.5, 2))
+local ReelName = label({ Position = UDim2.fromOffset(78, 0), Size = UDim2.new(1, -98, 1, 0), Text = "", Font = F_TITLE,
+	TextSize = 18, TextTruncate = Enum.TextTruncate.AtEnd, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
 
 -- Result view
 local ICON_X, ICON_Y = CARD_W / 2, 62
@@ -1076,27 +1095,50 @@ local Shine = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(
 	Rotation = 18, BackgroundColor3 = C.white, ZIndex = 13, Parent = Card }, { new("UIGradient", { Transparency = fadeEdges(0.78) }) })
 
 -- Refresh button
-local BtnBase = frame({ Position = UDim2.fromOffset(10, 302), Size = UDim2.new(1, -20, 0, 34), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
+local BtnBase = frame({ Position = UDim2.fromOffset(10, 302), Size = UDim2.new(1, -20, 0, 32), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
 	ZIndex = 4, Parent = Body }, { corner(10) })
-local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -3), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
+local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -2), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
 	BackgroundColor3 = C.off, Text = "", ZIndex = 5, Parent = BtnBase }, { corner(10) })
 local refreshGrad = grad({ C.cyan, C.blue, C.purple }, 0); refreshGrad.Enabled = false; refreshGrad.Parent = RefreshBtn
 local refreshStroke = stroke(C.ink, 1.5, 0); refreshStroke.Parent = RefreshBtn
-frame({ Position = UDim2.fromOffset(6, 3), Size = UDim2.new(1, -12, 0, 8), BackgroundColor3 = C.white, BackgroundTransparency = 0.82,
+frame({ Position = UDim2.fromOffset(6, 3), Size = UDim2.new(1, -12, 0, 7), BackgroundColor3 = C.white, BackgroundTransparency = 0.82,
 	ZIndex = 6, Parent = RefreshBtn }, { corner(4) })
-local RefreshLbl = label({ Size = UDim2.fromScale(1, 1), Text = "Refresh Fruit", Font = F_TITLE, TextSize = 15,
+local RefreshLbl = label({ Size = UDim2.fromScale(1, 1), Text = "Refresh Fruit", Font = F_TITLE, TextSize = 14,
 	TextColor3 = C.sub, ZIndex = 7, Parent = RefreshBtn }, { textStroke(C.ink, 1.5) })
 local Spinner = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0.5, -52, 0.5, 0), Size = UDim2.fromOffset(13, 13),
 	BackgroundTransparency = 1, Visible = false, ZIndex = 7, Parent = RefreshBtn }, { circle() })
 local spinStroke = stroke(C.white, 2.2, 0); spinStroke.Parent = Spinner
 new("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = spinStroke })
 
--- Footer
-local FooterBrand = label({ Position = UDim2.fromOffset(10, 338), Size = UDim2.new(0.6, 0, 0, 14), Text = "• " .. CONFIG.BrandName .. " " .. CONFIG.BrandTag,
-	Font = F_TITLE, TextSize = 11, TextColor3 = C.white, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4, Parent = Body })
-local footerGrad = grad({ C.cyan, C.purple, C.blue, C.cyan }, 0); footerGrad.Parent = FooterBrand
-label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 338), Size = UDim2.new(0.4, 0, 0, 14),
-	Text = CONFIG.ToggleKey.Name .. " = hide", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
+-- Footer + Discord Server Copy Button
+local FooterRow = frame({ Name = "FooterRow", Position = UDim2.fromOffset(10, 338), Size = UDim2.new(1, -20, 0, 20),
+	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
+
+local DiscordBtn = new("TextButton", {
+	Position = UDim2.fromOffset(0, 1),
+	Size = UDim2.fromOffset(118, 18),
+	BackgroundColor3 = C.discord,
+	AutoButtonColor = false,
+	Text = "Discord Server",
+	Font = F_BOLD,
+	TextSize = 9,
+	TextColor3 = C.white,
+	ZIndex = 5,
+	Parent = FooterRow,
+}, { corner(6), textStroke(C.ink, 1) })
+stroke(C.white, 1, 0.7).Parent = DiscordBtn
+
+local HideHintLbl = label({
+	AnchorPoint = Vector2.new(1, 0.5),
+	Position = UDim2.new(1, 0, 0.5, 0),
+	Size = UDim2.new(0.45, 0, 1, 0),
+	Text = CONFIG.ToggleKey.Name .. " = hide",
+	TextSize = 9,
+	TextColor3 = C.sub,
+	TextXAlignment = Enum.TextXAlignment.Right,
+	ZIndex = 4,
+	Parent = FooterRow,
+})
 
 ------------------------------------------------------------------------
 -- WHOLE-WINDOW FADE
@@ -1158,7 +1200,7 @@ local function clearFX()
 	for _, r in ipairs(rays) do r.BackgroundTransparency = 1 end
 	tween(cardStroke, 0.3, { Color = C.line, Transparency = 0 })
 	tween(cardTint, 0.3, { BackgroundTransparency = 1 })
-	tween(Haze, 0.4, { BackgroundColor3 = C.blue, BackgroundTransparency = 0.8 })
+	tween(Haze, 0.4, { BackgroundColor3 = C.blue, BackgroundTransparency = 0.88 })
 end
 
 local function showEmpty(title, sub, kind)
@@ -1263,8 +1305,25 @@ local function shake(power)
 end
 
 ------------------------------------------------------------------------
--- REEL + REVEAL
+-- REEL (REAL FRUIT SPRITES) + REVEAL
 ------------------------------------------------------------------------
+local function applyReelFruitVisual(fruitName, rarityName, spriteData)
+	local col = rarityInfo(rarityName).color
+	reelIconStroke.Color = col
+	local spr = spriteData or getFruitSprite(fruitName)
+	if spr and spr.Image then
+		ReelImage.Image = spr.Image
+		ReelImage.ImageRectOffset = spr.ImageRectOffset or Vector2.new(0, 0)
+		ReelImage.ImageRectSize = spr.ImageRectSize or Vector2.new(0, 0)
+		ReelImage.Visible = true
+		reelFruitFallback.body.Visible = false
+	else
+		ReelImage.Visible = false
+		reelFruitFallback.body.Visible = true
+		paintFruit(reelFruitFallback, rarityName)
+	end
+end
+
 local function spinReel(final, my)
 	showView("Reel")
 	slotScale.Scale = 1
@@ -1272,17 +1331,18 @@ local function spinReel(final, my)
 	local steps, start = 16, math.random(#REEL_LIST)
 	for i = 1, steps do
 		if not alive or my ~= state.token then return false end
-		local pick = (i == steps) and final or REEL_LIST[(start + i) % #REEL_LIST + 1]
+		local isLast = (i == steps)
+		local pick = isLast and final or REEL_LIST[(start + i) % #REEL_LIST + 1]
 		ReelName.Text = pick.name
 		ReelName.TextColor3 = rarityInfo(pick.rarity).color
-		paintFruit(reelFruit, pick.rarity)
-		ReelName.Position = UDim2.fromOffset(66, -10)
-		tween(ReelName, 0.07, { Position = UDim2.fromOffset(66, 0) })
+		applyReelFruitVisual(pick.name, pick.rarity, isLast and final.sprite or nil)
+		ReelName.Position = UDim2.fromOffset(78, -10)
+		tween(ReelName, 0.07, { Position = UDim2.fromOffset(78, 0) })
 		task.wait(0.025 + (i / steps) ^ 3 * 0.18)
 	end
 	local col = rarityInfo(final.rarity).color
 	slotStroke.Color = col
-	slotScale.Scale = 1.12
+	slotScale.Scale = 1.1
 	tween(slotScale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
 	task.wait(0.35)
 	return alive and my == state.token
@@ -1311,7 +1371,7 @@ local function reveal(data)
 	cardTint.BackgroundColor3 = col
 	tween(cardTint, 0.5, { BackgroundTransparency = 0.9 })
 	tween(cardStroke, 0.4, { Color = special and C.gold or col })
-	tween(Haze, 0.5, { BackgroundColor3 = col, BackgroundTransparency = 0.72 })
+	tween(Haze, 0.5, { BackgroundColor3 = col, BackgroundTransparency = 0.78 })
 
 	if data.sprite and data.sprite.Image then
 		IconImage.Image = data.sprite.Image
@@ -1474,14 +1534,31 @@ bind(BoostLuckBtn.MouseButton1Click, function() toggleGachaFlag("boostLuck") end
 bind(BypassTimeBtn.MouseButton1Click, function() toggleGachaFlag("bypassTime") end)
 bind(BypassMoneyBtn.MouseButton1Click, function() toggleGachaFlag("bypassCash") end)
 
+bind(DiscordBtn.MouseButton1Click, function()
+	local copied = false
+	if typeof(setclipboard) == "function" then
+		copied = pcall(setclipboard, CONFIG.DiscordInvite)
+	elseif typeof(toclipboard) == "function" then
+		copied = pcall(toclipboard, CONFIG.DiscordInvite)
+	end
+	DiscordBtn.Text = copied and "Copied Link!" or "discord.gg/V7DYYebjHD"
+	tween(DiscordBtn, 0.2, { BackgroundColor3 = C.green })
+	task.delay(2, function()
+		if DiscordBtn and DiscordBtn.Parent then
+			DiscordBtn.Text = "Discord Server"
+			tween(DiscordBtn, 0.2, { BackgroundColor3 = C.discord })
+		end
+	end)
+end)
+
 bind(ToggleHit.MouseButton1Click, function() setEnabled(not state.enabled) end)
 bind(ToggleHit.MouseEnter, function() tween(ToggleRow, 0.2, { BackgroundColor3 = Color3.fromRGB(36, 43, 68) }) end)
 bind(ToggleHit.MouseLeave, function() tween(ToggleRow, 0.2, { BackgroundColor3 = C.panel }) end)
 
-bind(RefreshBtn.MouseEnter, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -5) }) end)
-bind(RefreshBtn.MouseLeave, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -3) }) end)
+bind(RefreshBtn.MouseEnter, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -4) }) end)
+bind(RefreshBtn.MouseLeave, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -2) }) end)
 bind(RefreshBtn.MouseButton1Down, function() tween(RefreshBtn, 0.06, { Position = UDim2.fromOffset(0, 0) }) end)
-bind(RefreshBtn.MouseButton1Up, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -3) }, Enum.EasingStyle.Back) end)
+bind(RefreshBtn.MouseButton1Up, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -2) }, Enum.EasingStyle.Back) end)
 bind(RefreshBtn.MouseButton1Click, function()
 	if not state.enabled then
 		toggleRowStroke.Color = C.cyan
@@ -1637,7 +1714,6 @@ bind(RunService.Heartbeat, function(dt)
 	borderGrad.Rotation = (T * 55) % 360
 	local wave = math.sin(T * 1.4)
 	brandGrad.Offset = Vector2.new(wave * 0.35, 0)
-	footerGrad.Offset = Vector2.new(-wave * 0.35, 0)
 	if state.enabled then refreshGrad.Offset = Vector2.new(math.sin(T * 1.2) * 0.25, 0) end
 	headFruit.body.Rotation = math.sin(T * 2) * 8
 
@@ -1714,7 +1790,7 @@ showEmpty("No Fruit Detected", "Turn on the predictor to see the next shop fruit
 setButtonEnabled(false)
 
 fadeAll(snapshot(Holder), true, 0.45)
-local stagger = { ToggleRow, QuickBar, StatusChip, UpdatedLbl, Card, BtnBase, FooterBrand }
+local stagger = { ToggleRow, QuickBar, StatusChip, UpdatedLbl, Card, BtnBase, FooterRow }
 for i, obj in ipairs(stagger) do
 	local target = obj.Position
 	obj.Position = target + UDim2.fromOffset(0, 12)
