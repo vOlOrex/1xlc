@@ -1,6 +1,5 @@
 --[[
-    Fruit Spin Predictor  •  Blox Fruits UI  (v2 – Blox Fruits style)
-    Discord: https://discord.gg/V7DYYebjHD
+    Fruit Spin Predictor  •  Blox Fruits UI  (v2 + X100 Lucky Integration)
     RightControl hides / shows the window.
 ]]
 
@@ -9,7 +8,6 @@
 ------------------------------------------------------------------------
 local CONFIG = {
 	PredictionURL      = "",
-	DiscordInvite      = "https://discord.gg/V7DYYebjHD",
 	AutoRefreshSeconds = 30,
 	ScanDuration       = 1.0,
 	SpinAnimation      = true,
@@ -38,12 +36,12 @@ local ALIASES = { Chop = "Blade", Falcon = "Eagle", Barrier = "Creation", Rumble
 ------------------------------------------------------------------------
 -- SERVICES & SAFE GAME MODULES
 ------------------------------------------------------------------------
-local ReplicatedStorage  = game:GetService("ReplicatedStorage")
-local Players            = game:GetService("Players")
-local TweenService       = game:GetService("TweenService")
-local RunService         = game:GetService("RunService")
-local UIS                = game:GetService("UserInputService")
-local HttpService        = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UIS               = game:GetService("UserInputService")
+local HttpService       = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 while not LocalPlayer do
@@ -52,51 +50,42 @@ while not LocalPlayer do
 	task.wait(0.1)
 end
 
-local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-if not playerGui then
-	pcall(function() playerGui = LocalPlayer:WaitForChild("PlayerGui", 10) end)
-end
-if not playerGui then
-	playerGui = game:GetService("CoreGui")
-end
+local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 15)
 
 local function safeReq(fn)
 	local ok, res = pcall(fn)
 	return ok and res or nil
 end
 
-local DialogueController = safeReq(function() return require(ReplicatedStorage:WaitForChild("DialogueController", 4)) end)
+local DialogueController = safeReq(function() return require(ReplicatedStorage:WaitForChild("DialogueController", 5)) end)
 local GachaWindow        = safeReq(function()
-	local c = ReplicatedStorage:WaitForChild("Controllers", 4)
-	local u = c and c:WaitForChild("UI", 4)
-	return u and require(u:WaitForChild("GachaWindow", 4))
+	local c = ReplicatedStorage:WaitForChild("Controllers", 5)
+	local u = c and c:WaitForChild("UI", 5)
+	return u and require(u:WaitForChild("GachaWindow", 5))
 end)
 local commF              = safeReq(function()
-	local r = ReplicatedStorage:WaitForChild("Remotes", 4)
-	return r and r:WaitForChild("CommF_", 4)
+	local r = ReplicatedStorage:WaitForChild("Remotes", 5)
+	return r and r:WaitForChild("CommF_", 5)
 end)
 local origGachaOpen      = (GachaWindow and type(GachaWindow.Open) == "function") and GachaWindow.Open or nil
 local TextUtil           = safeReq(function()
-	local m = ReplicatedStorage:WaitForChild("Modules", 4)
-	local u = m and m:WaitForChild("Util", 4)
-	return u and require(u:WaitForChild("TextUtil", 4))
+	local m = ReplicatedStorage:WaitForChild("Modules", 5)
+	local u = m and m:WaitForChild("Util", 5)
+	return u and require(u:WaitForChild("TextUtil", 5))
 end)
 local ItemId             = safeReq(function()
-	local e = ReplicatedStorage:WaitForChild("Economy", 4)
-	return e and require(e:WaitForChild("ItemId", 4))
+	local e = ReplicatedStorage:WaitForChild("Economy", 5)
+	return e and require(e:WaitForChild("ItemId", 5))
 end)
-local ItemConfig         = safeReq(function() return require(ReplicatedStorage:WaitForChild("ItemConfig", 4)) end)
+local ItemConfig         = safeReq(function() return require(ReplicatedStorage:WaitForChild("ItemConfig", 5)) end)
 
 local ENV = _G
 pcall(function()
 	if typeof(getgenv) == "function" then
 		local g = getgenv()
-		if type(g) == "table" then
-			ENV = g
-		end
+		if type(g) == "table" then ENV = g end
 	end
 end)
-
 if type(ENV) == "table" and type(ENV.__FruitSpinPredictorDestroy) == "function" then
 	pcall(ENV.__FruitSpinPredictorDestroy)
 end
@@ -111,10 +100,11 @@ end
 for old, cur in pairs(ALIASES) do FRUIT_LOOKUP[old:lower()] = FRUIT_LOOKUP[cur:lower()] end
 
 ------------------------------------------------------------------------
--- GACHA & INVENTORY LOGIC
+-- X100 LUCKY GACHA & INVENTORY LOGIC
 ------------------------------------------------------------------------
 local gachaFlags = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false }
 local nextSelectedFruit = nil
+local onGachaRollFinished = nil
 
 local function getInventory()
 	if not ItemConfig then return {} end
@@ -128,18 +118,14 @@ local function getInventory()
 
 		if type(items2) == "table" then
 			for _, v2 in pairs(items2) do
-				if v2.ItemId then
-					tbl2[v2.ItemId] = v2.Value
-				end
+				if v2.ItemId then tbl2[v2.ItemId] = v2.Value end
 			end
 		end
 
 		local tbl3 = {}
 		if type(items3) == "table" then
 			for _, v2 in pairs(items3) do
-				if v2.ItemId and v2.Value and v2.Value ~= "" then
-					tbl3[v2.ItemId] = true
-				end
+				if v2.ItemId and v2.Value and v2.Value ~= "" then tbl3[v2.ItemId] = true end
 			end
 		end
 
@@ -147,23 +133,18 @@ local function getInventory()
 		if type(items) == "table" then
 			for _, item in pairs(items) do
 				if item.Value == true and item.ItemId then
-					local ok4, res4 = pcall(function()
-						return ItemConfig.tryGet(item.ItemId)
-					end)
-
+					local ok4, res4 = pcall(function() return ItemConfig.tryGet(item.ItemId) end)
 					if ok4 and type(res4) == "table" and res4.Display and res4.Display.Category == "Blox Fruit" then
 						local storageKey = res4.Index and res4.Index.StorageKey
 						local name = res4.Display.Name
 						storageKey = name and name ~= "" and name or storageKey or ""
 						local idType = res4.Index and res4.Index.IdType
 						local str3
-
 						if idType == "PhysicalMoveset" then
 							str3 = tbl3[item.ItemId] and "Mutated Fruit" or "Blox Fruit"
 						elseif idType == "Redeemable" then
 							str3 = "Premium"
 						end
-
 						if str3 then
 							table.insert(tbl4, {
 								ItemId = item.ItemId,
@@ -180,10 +161,8 @@ local function getInventory()
 				end
 			end
 		end
-
 		return tbl4
 	end)
-
 	if not ok3 then return {} end
 	return result3 or {}
 end
@@ -217,9 +196,7 @@ end
 
 local spriteCache = {}
 local function getFruitSprite(arg)
-	if spriteCache[arg] ~= nil then
-		return spriteCache[arg] or nil
-	end
+	if spriteCache[arg] ~= nil then return spriteCache[arg] or nil end
 	if not ItemConfig or type(ItemConfig.tryGet) ~= "function" then
 		spriteCache[arg] = false
 		return nil
@@ -229,9 +206,7 @@ local function getFruitSprite(arg)
 		spriteCache[arg] = false
 		return nil
 	end
-	local ok4, result4 = pcall(function()
-		return ItemConfig.tryGet(itemId)
-	end)
+	local ok4, result4 = pcall(function() return ItemConfig.tryGet(itemId) end)
 	if ok4 and type(result4) == "table" and result4.Display and result4.Display.Sprite then
 		spriteCache[arg] = result4.Display.Sprite
 		return result4.Display.Sprite
@@ -245,13 +220,11 @@ local function getFruitItemId(arg)
 end
 
 local spriteMap = {}
-
 local function registerFruit(arg, arg2)
 	local ok, data = pcall(function()
 		local str3 = arg .. "-" .. arg
 		local v2 = getFruitSprite(arg)
 		local image, imageRectOffset, imageRectSize
-
 		if v2 then
 			image = v2.Image
 			imageRectOffset = v2.ImageRectOffset or Vector2.new(0, 0)
@@ -261,9 +234,7 @@ local function registerFruit(arg, arg2)
 			imageRectOffset = Vector2.new(0, 0)
 			image = nil
 		end
-
 		spriteMap[str3] = arg
-
 		return {
 			StorageName = str3,
 			DisplayName = arg,
@@ -280,7 +251,6 @@ local function registerFruit(arg, arg2)
 			_UID = genUID(),
 		}
 	end)
-
 	if ok and data then return data end
 	return {
 		StorageName = arg .. "-" .. arg,
@@ -399,14 +369,11 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 				sound:Play()
 				sound.Ended:Connect(function() sound:Destroy() end)
 			end
-
 			task.wait(3)
-
 			local primeTool = getPrimeTool(str3)
 			local hasPrime = primeTool ~= nil
 			local flag4 = arg.Parent == character and arg or nil
 			if flag4 and flag4:IsA("Tool") then flag4:Destroy() end
-
 			if commF then
 				if hasPrime then
 					pcall(function()
@@ -506,9 +473,7 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 		DialogueController.start(v5)
 	end
 
-	arg.Activated:Connect(function()
-		pcall(openDialogue)
-	end)
+	arg.Activated:Connect(function() pcall(openDialogue) end)
 end
 
 local function injectPreviewModel(arg)
@@ -551,42 +516,74 @@ local function injectPreviewModel(arg)
 	end)
 end
 
-local onGachaRollFinished = nil
-
 local function executeGachaRoll(arg, arg2)
 	local v6 = nextSelectedFruit or pickCandidateFruit(arg)
 	nextSelectedFruit = pickCandidateFruit(arg)
-	if onGachaRollFinished then
-		task.spawn(onGachaRollFinished, nextSelectedFruit)
-	end
+	if onGachaRollFinished then task.spawn(onGachaRollFinished, nextSelectedFruit) end
 
 	task.spawn(function()
 		pcall(function()
 			require(ReplicatedStorage.Controllers.UI.Spinner):Open({ v6 }, allFruitsList, "ZiolesGacha")
 		end)
 
-		if arg and loadedModelFlags[v6.StorageName] then
+		if arg and gachaFlags.realMode then
 			local storageName = v6.StorageName
-			local v7 = cachedFruitModels[storageName]
-			if v7 and LocalPlayer.Backpack then
-				local clone = v7:Clone()
-				clone.Name = v6.DisplayName .. " Fruit"
-				clone:SetAttribute("X10Fake", true)
-				attachFakeFruitActions(clone, storageName, v6.DisplayName)
-				clone.Parent = LocalPlayer.Backpack
-				clone.Equipped:Connect(function()
-					local fruit = clone:FindFirstChild("Fruit")
-					if not fruit then return end
-					local animationController = fruit:FindFirstChildWhichIsA("AnimationController")
-					if not animationController then return end
-					local animator = animationController:FindFirstChildWhichIsA("Animator")
-					local animation = fruit:FindFirstChildWhichIsA("Animation", true)
-					if animator and animation then
-						local v8 = animator:LoadAnimation(animation)
-						v8.Looped = true
-						v8:Play()
+			local primeExists = getPrimeTool(storageName) ~= nil
+			if not primeExists and commF then
+				pcall(function() commF:InvokeServer("LoadFruit", storageName) end)
+				local now = tick()
+				while tick() - now < 2 do
+					primeExists = getPrimeTool(storageName) ~= nil
+					if primeExists then break end
+					task.wait(0.1)
+				end
+			end
+			if primeExists then
+				local primeTool = getPrimeTool(storageName)
+				local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+				if humanoid and primeTool then humanoid:EquipTool(primeTool) end
+				task.wait(1)
+				if humanoid and primeTool then
+					local handle = primeTool:FindFirstChild("Handle")
+					if handle then
+						local cFrame = handle.CFrame
+						humanoid:UnequipTools()
+						task.wait(0.1)
+						primeTool.CanBeDropped = true
+						primeTool.Parent = workspace
+						handle.CFrame = cFrame * CFrame.new(0, 0, -1.5)
+						handle.CanCollide = true
+						task.wait(2)
+						if primeTool.Parent == workspace and LocalPlayer.Backpack then
+							primeTool.Parent = LocalPlayer.Backpack
+						end
 					end
-				end)
+				end
+			end
+		else
+			if arg and loadedModelFlags[v6.StorageName] then
+				local storageName = v6.StorageName
+				local v7 = cachedFruitModels[storageName]
+				if v7 and LocalPlayer.Backpack then
+					local clone = v7:Clone()
+					clone.Name = v6.DisplayName .. " Fruit"
+					clone:SetAttribute("X10Fake", true)
+					attachFakeFruitActions(clone, storageName, v6.DisplayName)
+					clone.Parent = LocalPlayer.Backpack
+					clone.Equipped:Connect(function()
+						local fruit = clone:FindFirstChild("Fruit")
+						if not fruit then return end
+						local animationController = fruit:FindFirstChildWhichIsA("AnimationController")
+						if not animationController then return end
+						local animator = animationController:FindFirstChildWhichIsA("Animator")
+						local animation = fruit:FindFirstChildWhichIsA("Animation", true)
+						if animator and animation then
+							local v8 = animator:LoadAnimation(animation)
+							v8.Looped = true
+							v8:Play()
+						end
+					end)
+				end
 			end
 		end
 
@@ -767,6 +764,16 @@ if origGachaOpen then
 	end
 end
 
+pcall(function()
+	for _, v5 in ipairs({ LocalPlayer.Backpack, LocalPlayer.Character }) do
+		if v5 then
+			for _, child in ipairs(v5:GetChildren()) do
+				if child:IsA("Tool") and child:GetAttribute("X10Fake") then child:Destroy() end
+			end
+		end
+	end
+end)
+
 ------------------------------------------------------------------------
 -- THEME
 ------------------------------------------------------------------------
@@ -935,7 +942,7 @@ local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999 })
 mountGui(gui)
 
-local W, H, HEADER = 260, 354, 42
+local W, H, HEADER = 260, 386, 42
 local CARD_W, CARD_H = W - 20, 174
 
 local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 24),
@@ -994,6 +1001,7 @@ frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2),
 local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
 	BackgroundTransparency = 1, ZIndex = 3, Parent = Main })
 
+-- Toggle row
 local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
 	ZIndex = 4, Parent = Body }, { corner(10) })
 local toggleRowStroke = stroke(C.line, 1.2, 0); toggleRowStroke.Parent = ToggleRow
@@ -1009,7 +1017,46 @@ local Knob = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 
 	BackgroundColor3 = Color3.fromRGB(185, 192, 212), ZIndex = 6, Parent = Switch }, { circle() })
 local ToggleHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 7, Parent = ToggleRow })
 
-local StatusChip = frame({ Position = UDim2.fromOffset(10, 52), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X,
+-- X100 Lucky Quick Toggles Row (Luck / Time / Cash / Real)
+local LuckyBar = frame({ Name = "LuckyBar", Position = UDim2.fromOffset(10, 48), Size = UDim2.new(1, -20, 0, 24),
+	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
+new("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal,
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	VerticalAlignment = Enum.VerticalAlignment.Center,
+	Padding = UDim.new(0, 4),
+	Parent = LuckyBar,
+})
+
+local luckyBtnRefs = {}
+local function makeLuckyChip(flagKey, shortText, activeCol)
+	local b = new("TextButton", {
+		Size = UDim2.new(0.25, -3, 1, 0),
+		BackgroundColor3 = C.panel,
+		AutoButtonColor = false,
+		Text = shortText,
+		Font = F_BOLD,
+		TextSize = 9,
+		TextColor3 = C.sub,
+		ZIndex = 5,
+		Parent = LuckyBar,
+	}, { corner(7) })
+	local st = stroke(C.line, 1, 0); st.Parent = b
+	local function setVis(on)
+		tween(b, 0.18, { BackgroundColor3 = on and activeCol:Lerp(C.bg0, 0.7) or C.panel, TextColor3 = on and C.white or C.sub })
+		tween(st, 0.18, { Color = on and activeCol or C.line })
+	end
+	luckyBtnRefs[flagKey] = setVis
+	return b
+end
+
+local LuckChip = makeLuckyChip("boostLuck", "Luck", Color3.fromRGB(80, 200, 80))
+local TimeChip = makeLuckyChip("bypassTime", "Time", Color3.fromRGB(80, 160, 255))
+local CashChip = makeLuckyChip("bypassCash", "Cash", Color3.fromRGB(255, 200, 50))
+local RealChip = makeLuckyChip("realMode", "Real", Color3.fromRGB(255, 100, 100))
+
+-- Status row
+local StatusChip = frame({ Position = UDim2.fromOffset(10, 78), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X,
 	BackgroundColor3 = C.gray, BackgroundTransparency = 0.82, ZIndex = 4, Parent = Body }, {
 	circle(), new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 10) }),
 	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6) }),
@@ -1018,10 +1065,11 @@ local statusStroke = stroke(C.gray, 1, 0.4); statusStroke.Parent = StatusChip
 local StatusDot = frame({ Size = UDim2.fromOffset(7, 7), BackgroundColor3 = C.gray, ZIndex = 5, LayoutOrder = 1, Parent = StatusChip }, { circle() })
 local StatusText = label({ Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X, Text = "Waiting",
 	Font = F_BOLD, TextSize = 10, TextColor3 = C.gray, ZIndex = 5, LayoutOrder = 2, Parent = StatusChip })
-local UpdatedLbl = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 52), Size = UDim2.fromOffset(120, 20),
+local UpdatedLbl = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 78), Size = UDim2.fromOffset(120, 20),
 	Text = "No data yet", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
 
-local Card = frame({ Name = "Card", Position = UDim2.fromOffset(10, 80), Size = UDim2.new(1, -20, 0, CARD_H),
+-- Preview card
+local Card = frame({ Name = "Card", Position = UDim2.fromOffset(10, 106), Size = UDim2.new(1, -20, 0, CARD_H),
 	BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Body },
 	{ corner(12), grad({ Color3.fromRGB(28, 36, 62), Color3.fromRGB(12, 16, 30), C.sea }, 90) })
 local cardStroke = stroke(C.line, 1.6, 0); cardStroke.Parent = Card
@@ -1047,6 +1095,7 @@ local function view(name)
 end
 local EmptyView, ScanView, ReelView, ResultView = view("Empty"), view("Scan"), view("Reel"), view("Result")
 
+-- Empty view
 local EmptyIcon = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 52), Size = UDim2.fromOffset(54, 54),
 	BackgroundColor3 = C.panel, ZIndex = 6, Parent = EmptyView }, { circle() })
 local emptyIconStroke = stroke(C.line, 2, 0); emptyIconStroke.Parent = EmptyIcon
@@ -1058,6 +1107,7 @@ local EmptySub = label({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new
 	Text = "Turn on the predictor to scan.", TextSize = 10, TextColor3 = C.sub, TextWrapped = true,
 	TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 6, Parent = EmptyView })
 
+-- Scan view
 local Radar = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 62), Size = UDim2.fromOffset(84, 84),
 	BackgroundColor3 = C.cyan, BackgroundTransparency = 0.9, ZIndex = 6, Parent = ScanView }, { circle(), stroke(C.cyan, 1.5, 0.15) })
 frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(48, 48),
@@ -1078,6 +1128,7 @@ local ScanLine = frame({ Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan
 frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = C.cyan, ZIndex = 7, Parent = ScanLine },
 	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.8) }) })
 
+-- Reel view
 label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
 	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
 local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 82), Size = UDim2.fromOffset(196, 74),
@@ -1092,6 +1143,7 @@ local reelFruit = makeFruit(Slot, 40, 8, UDim2.new(0, 36, 0.5, 2))
 local ReelName = label({ Position = UDim2.fromOffset(66, 0), Size = UDim2.new(1, -72, 1, 0), Text = "", Font = F_TITLE,
 	TextSize = 20, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
 
+-- Result view
 local ICON_X, ICON_Y = CARD_W / 2, 62
 label({ Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 12), Text = "PREDICTED FRUIT", Font = F_BOLD,
 	TextSize = 9, TextColor3 = C.sub, ZIndex = 6, Parent = ResultView })
@@ -1132,7 +1184,8 @@ local DetailLbl = label({ Position = UDim2.fromOffset(0, 153), Size = UDim2.new(
 local Shine = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(-0.3, 0, 0.5, 0), Size = UDim2.new(0, 34, 1.6, 0),
 	Rotation = 18, BackgroundColor3 = C.white, ZIndex = 13, Parent = Card }, { new("UIGradient", { Transparency = fadeEdges(0.78) }) })
 
-local BtnBase = frame({ Position = UDim2.fromOffset(10, 262), Size = UDim2.new(1, -20, 0, 34), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
+-- Refresh button
+local BtnBase = frame({ Position = UDim2.fromOffset(10, 288), Size = UDim2.new(1, -20, 0, 34), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
 	ZIndex = 4, Parent = Body }, { corner(10) })
 local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -3), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
 	BackgroundColor3 = C.off, Text = "", ZIndex = 5, Parent = BtnBase }, { corner(10) })
@@ -1147,10 +1200,11 @@ local Spinner = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(
 local spinStroke = stroke(C.white, 2.2, 0); spinStroke.Parent = Spinner
 new("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = spinStroke })
 
-local FooterBrand = label({ Position = UDim2.fromOffset(10, 296), Size = UDim2.new(0.6, 0, 0, 14), Text = "• " .. CONFIG.BrandName .. " " .. CONFIG.BrandTag,
+-- Footer
+local FooterBrand = label({ Position = UDim2.fromOffset(10, 326), Size = UDim2.new(0.6, 0, 0, 14), Text = "• " .. CONFIG.BrandName .. " " .. CONFIG.BrandTag,
 	Font = F_TITLE, TextSize = 11, TextColor3 = C.white, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4, Parent = Body })
 local footerGrad = grad({ C.cyan, C.purple, C.blue, C.cyan }, 0); footerGrad.Parent = FooterBrand
-label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 296), Size = UDim2.new(0.4, 0, 0, 14),
+label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 326), Size = UDim2.new(0.4, 0, 0, 14),
 	Text = CONFIG.ToggleKey.Name .. " = hide", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
 
 ------------------------------------------------------------------------
@@ -1406,7 +1460,7 @@ local function reveal(data)
 end
 
 ------------------------------------------------------------------------
--- DATA SOURCE (real data + shop pool fallback)
+-- DATA SOURCE (X100 LUCKY + CUSTOM/URL)
 ------------------------------------------------------------------------
 local function normalize(d, sourceName)
 	local fruit = d.fruit or d.Fruit or d.name or d.Name
@@ -1422,7 +1476,7 @@ local function normalize(d, sourceName)
 	return { name = name, rarity = rarity, icon = icon, source = sourceName }
 end
 
-local function fetchPrediction()
+local function fetchPrediction(forceNew)
 	local src = type(ENV) == "table" and ENV.FruitPrediction or nil
 	if type(src) == "function" then
 		local ok, res = pcall(src)
@@ -1439,7 +1493,7 @@ local function fetchPrediction()
 		return normalize(data, "Prediction server")
 	end
 
-	if not nextSelectedFruit then
+	if forceNew or not nextSelectedFruit then
 		nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
 	end
 	if nextSelectedFruit then
@@ -1449,17 +1503,17 @@ local function fetchPrediction()
 			name = nextSelectedFruit.DisplayName,
 			rarity = rName,
 			icon = spr and spr.Image or FRUIT_ICONS[nextSelectedFruit.DisplayName],
-			source = "Dealer Gacha",
+			source = "X100 Lucky",
 		}, nil
 	end
 
 	return nil, "NO_SOURCE"
 end
 
-local function fetchWithTimeout(timeout)
+local function fetchWithTimeout(timeout, forceNew)
 	local done, res, err = false, nil, nil
 	task.spawn(function()
-		local ok, r, e = pcall(fetchPrediction)
+		local ok, r, e = pcall(fetchPrediction, forceNew)
 		if ok then res, err = r, e else err = "Something went wrong reading the prediction." end
 		done = true
 	end)
@@ -1471,9 +1525,6 @@ end
 
 local function runPrediction(forceNew)
 	if not state.enabled or state.busy then return end
-	if forceNew then
-		nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
-	end
 	state.busy = true
 	state.token += 1
 	local my = state.token
@@ -1486,7 +1537,7 @@ local function runPrediction(forceNew)
 	tween(ProgFill, CONFIG.ScanDuration, { Size = UDim2.fromScale(0.9, 1) }, Enum.EasingStyle.Sine)
 
 	local t0 = os.clock()
-	local res, err = fetchWithTimeout(CONFIG.RequestTimeout)
+	local res, err = fetchWithTimeout(CONFIG.RequestTimeout, forceNew)
 	local left = CONFIG.ScanDuration - (os.clock() - t0)
 	if left > 0 then task.wait(left) end
 	if not alive or my ~= state.token then return end
@@ -1521,7 +1572,7 @@ onGachaRollFinished = function(newCand)
 			name = newCand.DisplayName,
 			rarity = rName,
 			icon = spr and spr.Image or FRUIT_ICONS[newCand.DisplayName],
-			source = "Dealer Gacha",
+			source = "X100 Lucky",
 		})
 		setStatus("Detected", rName)
 		stamp("Next roll ready")
@@ -1529,7 +1580,7 @@ onGachaRollFinished = function(newCand)
 end
 
 ------------------------------------------------------------------------
--- TOGGLE
+-- TOGGLE & LUCKY FLAGS
 ------------------------------------------------------------------------
 local function setEnabled(on)
 	state.enabled = on
@@ -1552,9 +1603,35 @@ local function setEnabled(on)
 	end
 end
 
+local function toggleLuckyFlag(key)
+	gachaFlags[key] = not gachaFlags[key]
+	local on = gachaFlags[key]
+	if luckyBtnRefs[key] then luckyBtnRefs[key](on) end
+	if key == "boostLuck" then
+		nextSelectedFruit = pickCandidateFruit(on)
+		if state.enabled and nextSelectedFruit then
+			local spr = getFruitSprite(nextSelectedFruit.DisplayName)
+			local rName = (nextSelectedFruit.Rarity and nextSelectedFruit.Rarity.Name) or "Common"
+			reveal({
+				name = nextSelectedFruit.DisplayName,
+				rarity = rName,
+				icon = spr and spr.Image or FRUIT_ICONS[nextSelectedFruit.DisplayName],
+				source = "X100 Lucky",
+			})
+			setStatus("Detected", rName)
+			stamp(on and "Luck ON" or "Normal Pool")
+		end
+	end
+end
+
 ------------------------------------------------------------------------
 -- INTERACTIONS
 ------------------------------------------------------------------------
+bind(LuckChip.Activated, function() toggleLuckyFlag("boostLuck") end)
+bind(TimeChip.Activated, function() toggleLuckyFlag("bypassTime") end)
+bind(CashChip.Activated, function() toggleLuckyFlag("bypassCash") end)
+bind(RealChip.Activated, function() toggleLuckyFlag("realMode") end)
+
 bind(ToggleHit.Activated, function() setEnabled(not state.enabled) end)
 bind(ToggleHit.MouseEnter, function() tween(ToggleRow, 0.2, { BackgroundColor3 = Color3.fromRGB(36, 43, 68) }) end)
 bind(ToggleHit.MouseLeave, function() tween(ToggleRow, 0.2, { BackgroundColor3 = C.panel }) end)
@@ -1649,7 +1726,6 @@ task.spawn(function()
 
 	local inv = getInventory()
 	local mythItems = {}
-
 	for _, item in pairs(inv) do
 		if item.Type == "Blox Fruit" and (item.Rarity or 0) == 4 then
 			table.insert(mythItems, item)
@@ -1808,7 +1884,7 @@ task.spawn(function()
 			if acc >= CONFIG.AutoRefreshSeconds then
 				acc = 0
 				local my = state.token
-				local res, err = fetchWithTimeout(CONFIG.RequestTimeout)
+				local res, err = fetchWithTimeout(CONFIG.RequestTimeout, false)
 				if alive and state.enabled and not state.busy and my == state.token then
 					if res then
 						local cur = state.current
@@ -1833,7 +1909,7 @@ showEmpty("No Fruit Detected", "Turn on the predictor to scan.")
 setButtonEnabled(false)
 
 fadeAll(snapshot(Holder), true, 0.45)
-local stagger = { ToggleRow, StatusChip, UpdatedLbl, Card, BtnBase, FooterBrand }
+local stagger = { ToggleRow, LuckyBar, StatusChip, UpdatedLbl, Card, BtnBase, FooterBrand }
 for i, obj in ipairs(stagger) do
 	local target = obj.Position
 	obj.Position = target + UDim2.fromOffset(0, 12)
