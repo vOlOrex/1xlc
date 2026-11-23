@@ -23,7 +23,7 @@ local FRUITS = {
 local ALIASES = { Chop = "Blade", Falcon = "Eagle", Barrier = "Creation", Rumble = "Lightning", Leopard = "Tiger" }
 
 ------------------------------------------------------------------------
--- SERVICES & GAME MODULES
+-- SERVICES & SAFE GAME MODULES
 ------------------------------------------------------------------------
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local Players            = game:GetService("Players")
@@ -32,27 +32,48 @@ local RunService         = game:GetService("RunService")
 local UIS                = game:GetService("UserInputService")
 local HttpService        = game:GetService("HttpService")
 
-local LocalPlayer        = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
 while not LocalPlayer do
-	Players.PlayerAdded:Wait()
+	pcall(function() Players:GetPropertyChangedSignal("LocalPlayer"):Wait() end)
 	LocalPlayer = Players.LocalPlayer
+	task.wait(0.1)
 end
-local playerGui          = LocalPlayer:WaitForChild("PlayerGui", 15)
+
+local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+if not playerGui then
+	pcall(function() playerGui = LocalPlayer:WaitForChild("PlayerGui", 10) end)
+end
+if not playerGui then
+	playerGui = game:GetService("CoreGui")
+end
 
 local function safeReq(fn)
 	local ok, res = pcall(fn)
 	return ok and res or nil
 end
 
-local DialogueController = safeReq(function() return require(ReplicatedStorage.DialogueController) end)
-local GachaWindow        = safeReq(function() return require(ReplicatedStorage.Controllers.UI.GachaWindow) end)
-local commF              = safeReq(function() return ReplicatedStorage.Remotes.CommF_ end)
-local origGachaOpen      = GachaWindow and GachaWindow.Open or nil
-local TextUtil           = safeReq(function() return require(ReplicatedStorage.Modules.Util.TextUtil) end)
-local ItemId             = safeReq(function() return require(ReplicatedStorage.Economy.ItemId) end)
-local ItemConfig         = safeReq(function() return require(ReplicatedStorage.ItemConfig) end)
+local DialogueController = safeReq(function() return require(ReplicatedStorage:WaitForChild("DialogueController", 4)) end)
+local GachaWindow        = safeReq(function()
+	local c = ReplicatedStorage:WaitForChild("Controllers", 4)
+	local u = c and c:WaitForChild("UI", 4)
+	return u and require(u:WaitForChild("GachaWindow", 4))
+end)
+local commF              = safeReq(function()
+	local r = ReplicatedStorage:WaitForChild("Remotes", 4)
+	return r and r:WaitForChild("CommF_", 4)
+end)
+local origGachaOpen      = (GachaWindow and type(GachaWindow.Open) == "function") and GachaWindow.Open or nil
+local TextUtil           = safeReq(function()
+	local m = ReplicatedStorage:WaitForChild("Modules", 4)
+	local u = m and m:WaitForChild("Util", 4)
+	return u and require(u:WaitForChild("TextUtil", 4))
+end)
+local ItemId             = safeReq(function()
+	local e = ReplicatedStorage:WaitForChild("Economy", 4)
+	return e and require(e:WaitForChild("ItemId", 4))
+end)
+local ItemConfig         = safeReq(function() return require(ReplicatedStorage:WaitForChild("ItemConfig", 4)) end)
 
--- إصلاح مشكلة ENV / getgenv التي تسبب attempt to call a nil value
 local ENV = _G
 pcall(function()
 	if typeof(getgenv) == "function" then
@@ -168,24 +189,33 @@ local RARITY_COLORS = {
 	Color3.fromRGB(255, 50, 50),
 }
 
+local function safeResolveItemId(str3)
+	if not ItemId or type(ItemId.getId) ~= "function" then return nil end
+	local ok, raw = pcall(function() return ItemId.getId(str3, "PhysicalMoveset") end)
+	if not ok or not raw then return nil end
+	local val = raw
+	if type(raw) == "table" and type(raw.asNullable) == "function" then
+		local okN, resN = pcall(function() return raw:asNullable() end)
+		if okN then val = resN end
+	end
+	if not val then return nil end
+	return type(val) == "table" and (val.ItemId or val.Id) or val
+end
+
 local spriteCache = {}
 local function getFruitSprite(arg)
 	if spriteCache[arg] ~= nil then
 		return spriteCache[arg] or nil
 	end
-	if not ItemId or not ItemConfig then
+	if not ItemConfig or type(ItemConfig.tryGet) ~= "function" then
 		spriteCache[arg] = false
 		return nil
 	end
-	local str3 = arg .. "-" .. arg
-	local ok3, result3 = pcall(function()
-		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
-	end)
-	if not ok3 or not result3 then
+	local itemId = safeResolveItemId(arg .. "-" .. arg)
+	if not itemId then
 		spriteCache[arg] = false
 		return nil
 	end
-	local itemId = type(result3) == "table" and (result3.ItemId or result3.Id) or result3
 	local ok4, result4 = pcall(function()
 		return ItemConfig.tryGet(itemId)
 	end)
@@ -198,47 +228,52 @@ local function getFruitSprite(arg)
 end
 
 local function getFruitItemId(arg)
-	if not ItemId then return nil end
-	local str3 = arg .. "-" .. arg
-	local ok3, result3 = pcall(function()
-		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
-	end)
-	if not ok3 or not result3 then return nil end
-	return type(result3) == "table" and (result3.ItemId or result3.Id) or result3
+	return safeResolveItemId(arg .. "-" .. arg)
 end
 
 local spriteMap = {}
 
 local function registerFruit(arg, arg2)
-	local str3 = arg .. "-" .. arg
-	local v2 = getFruitSprite(arg)
-	local image, imageRectOffset, imageRectSize
+	local ok, data = pcall(function()
+		local str3 = arg .. "-" .. arg
+		local v2 = getFruitSprite(arg)
+		local image, imageRectOffset, imageRectSize
 
-	if v2 then
-		image = v2.Image
-		imageRectOffset = v2.ImageRectOffset or Vector2.new(0, 0)
-		imageRectSize = v2.ImageRectSize or Vector2.new(0, 0)
-	else
-		imageRectSize = Vector2.new(0, 0)
-		imageRectOffset = Vector2.new(0, 0)
-		image = nil
-	end
+		if v2 then
+			image = v2.Image
+			imageRectOffset = v2.ImageRectOffset or Vector2.new(0, 0)
+			imageRectSize = v2.ImageRectSize or Vector2.new(0, 0)
+		else
+			imageRectSize = Vector2.new(0, 0)
+			imageRectOffset = Vector2.new(0, 0)
+			image = nil
+		end
 
-	spriteMap[str3] = arg
+		spriteMap[str3] = arg
 
+		return {
+			StorageName = str3,
+			DisplayName = arg,
+			ImageName = str3,
+			ItemId = getFruitItemId(arg),
+			Image = image,
+			ImageRectOffset = imageRectOffset,
+			ImageRectSize = imageRectSize,
+			Rarity = { Name = RARITY_NAMES[arg2], Value = arg2, Color = RARITY_COLORS[arg2] },
+			Attributes = {},
+			Filter = nil,
+			ItemType = "Item",
+			Awards = nil,
+			_UID = genUID(),
+		}
+	end)
+
+	if ok and data then return data end
 	return {
-		StorageName = str3,
+		StorageName = arg .. "-" .. arg,
 		DisplayName = arg,
-		ImageName = str3,
-		ItemId = getFruitItemId(arg),
-		Image = image,
-		ImageRectOffset = imageRectOffset,
-		ImageRectSize = imageRectSize,
+		ImageName = arg .. "-" .. arg,
 		Rarity = { Name = RARITY_NAMES[arg2], Value = arg2, Color = RARITY_COLORS[arg2] },
-		Attributes = {},
-		Filter = nil,
-		ItemType = "Item",
-		Awards = nil,
 		_UID = genUID(),
 	}
 end
@@ -299,13 +334,16 @@ end)
 local mythicalFruits = {}
 local normalFruits = {}
 for _, v5 in pairs(allFruitsList) do
-	if v5.Rarity.Value == 4 then table.insert(mythicalFruits, v5) else table.insert(normalFruits, v5) end
+	if v5.Rarity and v5.Rarity.Value == 4 then table.insert(mythicalFruits, v5) else table.insert(normalFruits, v5) end
 end
 
 local ownedMythPool = {}
-local replicatedFruits = playerGui:FindFirstChild("__ReplicatedFruits") or Instance.new("Folder")
-replicatedFruits.Name = "__ReplicatedFruits"
-replicatedFruits.Parent = playerGui
+local replicatedFruits = nil
+pcall(function()
+	replicatedFruits = playerGui:FindFirstChild("__ReplicatedFruits") or Instance.new("Folder")
+	replicatedFruits.Name = "__ReplicatedFruits"
+	replicatedFruits.Parent = playerGui
+end)
 local loadedModelFlags = {}
 local cachedFruitModels = {}
 
@@ -324,7 +362,7 @@ local function getPrimeTool(fruitName)
 		table.insert(candidates, baseName)
 	end
 	for _, name in ipairs(candidates) do
-		local tool = LocalPlayer.Backpack:FindFirstChild(name)
+		local tool = LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild(name)
 		if tool and tool:IsA("Tool") and not tool:GetAttribute("X10Fake") then return tool end
 		local charTool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name)
 		if charTool and charTool:IsA("Tool") and not charTool:GetAttribute("X10Fake") then return charTool end
@@ -512,7 +550,8 @@ local function injectPreviewModel(arg)
 	clone:SetAttribute("__Size", clone:GetExtentsSize())
 	clone.Parent = replicatedSpinnerInstances
 	task.spawn(function()
-		local Spinner = require(ReplicatedStorage.Controllers.UI.Spinner)
+		local okSp, Spinner = pcall(function() return require(ReplicatedStorage.Controllers.UI.Spinner) end)
+		if not okSp or not Spinner then return end
 		local now = tick()
 		while tick() - now < 5 and not Spinner:IsOpen() do task.wait(0.1) end
 		while tick() - now < 600 and Spinner:IsOpen() do task.wait(0.5) end
@@ -537,7 +576,7 @@ local function executeGachaRoll(arg, arg2)
 		if arg and loadedModelFlags[v6.StorageName] then
 			local storageName = v6.StorageName
 			local v7 = cachedFruitModels[storageName]
-			if v7 then
+			if v7 and LocalPlayer.Backpack then
 				local clone = v7:Clone()
 				clone.Name = v6.DisplayName .. " Fruit"
 				clone:SetAttribute("X10Fake", true)
@@ -687,11 +726,13 @@ local function processZiolesDescendant(arg)
 	end
 end
 
-playerGui.DescendantAdded:Connect(function(descendant)
-	if gachaHookActive then processZiolesDescendant(descendant) end
+pcall(function()
+	playerGui.DescendantAdded:Connect(function(descendant)
+		if gachaHookActive then processZiolesDescendant(descendant) end
+	end)
 end)
 
-if GachaWindow and origGachaOpen then
+if origGachaOpen then
 	GachaWindow.Open = function(arg, arg2, arg3, ...)
 		if arg2 == "ZiolesGacha" then
 			resetGachaHooks()
@@ -775,14 +816,22 @@ local F_REG   = Enum.Font.GothamMedium
 -- HELPERS
 ------------------------------------------------------------------------
 local alive, conns = true, {}
-local function bind(signal, fn) local c = signal:Connect(fn); table.insert(conns, c); return c end
+local function bind(signal, fn)
+	if not signal then return nil end
+	local ok, c = pcall(function() return signal:Connect(fn) end)
+	if ok and c then table.insert(conns, c) end
+	return c
+end
 
 local function new(class, props, children)
-	local o = Instance.new(class)
+	local ok, o = pcall(function() return Instance.new(class) end)
+	if not ok or not o then o = Instance.new("Frame") end
 	local parent
-	for k, v in pairs(props or {}) do if k == "Parent" then parent = v else o[k] = v end end
-	for _, ch in ipairs(children or {}) do ch.Parent = o end
-	if parent then o.Parent = parent end
+	for k, v in pairs(props or {}) do
+		if k == "Parent" then parent = v else pcall(function() o[k] = v end) end
+	end
+	for _, ch in ipairs(children or {}) do pcall(function() ch.Parent = o end) end
+	if parent then pcall(function() o.Parent = parent end) end
 	return o
 end
 local function corner(r) return new("UICorner", { CornerRadius = UDim.new(0, r) }) end
@@ -800,8 +849,15 @@ local function grad(colors, rot)
 	return new("UIGradient", { Color = ColorSequence.new(kp), Rotation = rot or 0 })
 end
 local function tween(o, t, props, style, dir)
-	local tw = TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
-	tw:Play(); return tw
+	local ok, tw = pcall(function()
+		return TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+	end)
+	if ok and tw then
+		pcall(function() tw:Play() end)
+		return tw
+	end
+	for k, v in pairs(props or {}) do pcall(function() o[k] = v end) end
+	return nil
 end
 local function label(props, children)
 	props.BackgroundTransparency = 1
@@ -851,8 +907,10 @@ end
 ------------------------------------------------------------------------
 -- SCREEN GUI
 ------------------------------------------------------------------------
-local oldGui = playerGui:FindFirstChild("FruitSpinPredictor")
-if oldGui then oldGui:Destroy() end
+pcall(function()
+	local oldGui = playerGui:FindFirstChild("FruitSpinPredictor")
+	if oldGui then oldGui:Destroy() end
+end)
 
 local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false, IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999, Parent = playerGui })
@@ -860,7 +918,6 @@ local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false
 local W, H, HEADER = 276, 404, 42
 local CARD_W, CARD_H = W - 20, 174
 
--- زر عائم للموبايل لفتح وإغلاق القائمة بسهولة
 local MobileBtn = new("TextButton", {
 	Name = "MobileToggle",
 	Position = UDim2.new(0, 12, 0.5, -20),
@@ -1644,8 +1701,13 @@ end)
 -- BACKGROUND PRELOAD OF MYTHICAL FRUIT MODELS FROM INVENTORY
 ------------------------------------------------------------------------
 task.spawn(function()
-	if not commF then return end
-	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	if not commF or not replicatedFruits then return end
+	local character = LocalPlayer.Character
+	if not character then
+		pcall(function() character = LocalPlayer.CharacterAdded:Wait() end)
+	end
+	if not character then return end
+
 	local inv = getInventory()
 	local mythItems = {}
 
@@ -1665,7 +1727,7 @@ task.spawn(function()
 			local toolFound = nil
 			local now = tick()
 			while tick() - now < 3 do
-				local found = LocalPlayer.Backpack:FindFirstChild(displayName .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(item.Name .. " Fruit")
+				local found = LocalPlayer.Backpack and (LocalPlayer.Backpack:FindFirstChild(displayName .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(item.Name .. " Fruit"))
 				if found then toolFound = found; break else task.wait(0.1) end
 			end
 
@@ -1679,7 +1741,8 @@ task.spawn(function()
 					if humanoid then
 						humanoid:EquipTool(toolFound)
 						task.wait(1)
-						local charModel = workspace.Characters:FindFirstChild(LocalPlayer.Name)
+						local charsFolder = workspace:FindFirstChild("Characters")
+						local charModel = charsFolder and charsFolder:FindFirstChild(LocalPlayer.Name)
 						if charModel then
 							charModel = charModel:FindFirstChild(displayName .. " Fruit") or charModel:FindFirstChild(item.Name .. " Fruit")
 						end
@@ -1723,6 +1786,7 @@ end)
 ------------------------------------------------------------------------
 local T, partAcc, starAcc, boltAcc, shineAcc, waveAcc = 0, 0, 0, 0, 0, 0
 bind(RunService.Heartbeat, function(dt)
+	if not alive then return end
 	T += dt
 	borderGrad.Rotation = (T * 55) % 360
 	local wave = math.sin(T * 1.4)
