@@ -1,8 +1,8 @@
 --[[
-    Fruit Spin Predictor  •  Blox Fruits UI  (Merged Edition)
+    Fruit Spin Predictor  •  Blox Fruits UI  (Mobile & Cross-Executor Edition)
     Discord: https://discord.gg/V7DYYebjHD
     ------------------------------------------------------------------
-    RightControl hides / shows the window.
+    RightControl OR Floating Button hides / shows the window.
 ]]
 
 ------------------------------------------------------------------------
@@ -17,11 +17,9 @@ local CONFIG = {
 	RequestTimeout     = 10,
 	BrandName          = "FRUIT SPIN",
 	BrandTag           = "PREDICTOR",
-	Version            = "v2.6",
+	Version            = "v2.7",
 	ToggleKey          = Enum.KeyCode.RightControl,
 }
-
-local FRUIT_ICONS = {}
 
 local FRUITS = {
 	Common    = {"Rocket","Spin","Blade","Spring","Bomb","Smoke","Spike"},
@@ -35,7 +33,7 @@ local FRUITS = {
 local ALIASES = { Chop = "Blade", Falcon = "Eagle", Barrier = "Creation", Rumble = "Lightning", Leopard = "Tiger" }
 
 ------------------------------------------------------------------------
--- SERVICES & GAME MODULES
+-- SERVICES & SAFE MODULE LOADING (CROSS-EXECUTOR FIX)
 ------------------------------------------------------------------------
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local Players            = game:GetService("Players")
@@ -43,16 +41,29 @@ local TweenService       = game:GetService("TweenService")
 local RunService         = game:GetService("RunService")
 local UIS                = game:GetService("UserInputService")
 local HttpService        = game:GetService("HttpService")
-local LocalPlayer        = Players.LocalPlayer
-local playerGui          = LocalPlayer:WaitForChild("PlayerGui")
+local CoreGui            = game:GetService("CoreGui")
 
-local DialogueController = require(ReplicatedStorage.DialogueController)
-local GachaWindow        = require(ReplicatedStorage.Controllers.UI.GachaWindow)
-local commF              = ReplicatedStorage.Remotes.CommF_
-local origGachaOpen      = GachaWindow.Open
-local TextUtil           = require(ReplicatedStorage.Modules.Util.TextUtil)
-local ItemId             = require(ReplicatedStorage.Economy.ItemId)
-local ItemConfig         = require(ReplicatedStorage.ItemConfig)
+local LocalPlayer        = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() and Players.LocalPlayer
+local playerGui          = LocalPlayer:WaitForChild("PlayerGui", 15)
+
+local function safeRequire(pathFn)
+	local ok, mod = pcall(pathFn)
+	return ok and mod or nil
+end
+
+local DialogueController = safeRequire(function() return require(ReplicatedStorage:WaitForChild("DialogueController", 5)) end)
+local GachaWindow        = safeRequire(function() return require(ReplicatedStorage:WaitForChild("Controllers", 5):WaitForChild("UI", 5):WaitForChild("GachaWindow", 5)) end)
+local TextUtil           = safeRequire(function() return require(ReplicatedStorage:WaitForChild("Modules", 5):WaitForChild("Util", 5):WaitForChild("TextUtil", 5)) end)
+local ItemId             = safeRequire(function() return require(ReplicatedStorage:WaitForChild("Economy", 5):WaitForChild("ItemId", 5)) end)
+local ItemConfig         = safeRequire(function() return require(ReplicatedStorage:WaitForChild("ItemConfig", 5)) end)
+
+local commF = nil
+pcall(function()
+	local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
+	if remotes then commF = remotes:WaitForChild("CommF_", 5) end
+end)
+
+local origGachaOpen = GachaWindow and GachaWindow.Open or nil
 
 local ENV = (typeof(getgenv) == "function" and getgenv()) or _G
 if ENV.__FruitSpinPredictorDestroy then pcall(ENV.__FruitSpinPredictorDestroy) end
@@ -67,12 +78,13 @@ end
 for old, cur in pairs(ALIASES) do FRUIT_LOOKUP[old:lower()] = FRUIT_LOOKUP[cur:lower()] end
 
 ------------------------------------------------------------------------
--- GACHA & INVENTORY LOGIC (FROM X100 LUCKY)
+-- GACHA & INVENTORY LOGIC
 ------------------------------------------------------------------------
 local gachaFlags = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false }
 local nextSelectedFruit = nil
 
 local function getInventory()
+	if not ItemConfig then return {} end
 	local ok3, result3 = pcall(function()
 		local ItemReplicationService = require(ReplicatedStorage.ItemReplicationService)
 		local KEYS = require(ReplicatedStorage.ItemReplicationService.KEYS)
@@ -83,18 +95,14 @@ local function getInventory()
 
 		if type(items2) == "table" then
 			for _, v2 in pairs(items2) do
-				if v2.ItemId then
-					tbl2[v2.ItemId] = v2.Value
-				end
+				if v2.ItemId then tbl2[v2.ItemId] = v2.Value end
 			end
 		end
 
 		local tbl3 = {}
 		if type(items3) == "table" then
 			for _, v2 in pairs(items3) do
-				if v2.ItemId and v2.Value and v2.Value ~= "" then
-					tbl3[v2.ItemId] = true
-				end
+				if v2.ItemId and v2.Value and v2.Value ~= "" then tbl3[v2.ItemId] = true end
 			end
 		end
 
@@ -102,10 +110,7 @@ local function getInventory()
 		if type(items) == "table" then
 			for _, item in pairs(items) do
 				if item.Value == true and item.ItemId then
-					local ok4, res4 = pcall(function()
-						return ItemConfig.tryGet(item.ItemId)
-					end)
-
+					local ok4, res4 = pcall(function() return ItemConfig.tryGet(item.ItemId) end)
 					if ok4 and type(res4) == "table" and res4.Display and res4.Display.Category == "Blox Fruit" then
 						local storageKey = res4.Index and res4.Index.StorageKey
 						local name = res4.Display.Name
@@ -135,7 +140,6 @@ local function getInventory()
 				end
 			end
 		end
-
 		return tbl4
 	end)
 
@@ -144,7 +148,8 @@ local function getInventory()
 end
 
 local function genUID()
-	return HttpService:GenerateGUID(false)
+	local ok, guid = pcall(function() return HttpService:GenerateGUID(false) end)
+	return ok and guid or tostring(math.random(100000, 999999))
 end
 
 local RARITY_NAMES = { [0] = "Common", "Uncommon", "Rare", "Legendary", "Mythical" }
@@ -158,21 +163,19 @@ local RARITY_COLORS = {
 
 local spriteCache = {}
 local function getFruitSprite(arg)
-	if spriteCache[arg] ~= nil then
-		return spriteCache[arg] or nil
+	if spriteCache[arg] ~= nil then return spriteCache[arg] or nil end
+	if not ItemId or not ItemConfig then
+		spriteCache[arg] = false
+		return nil
 	end
 	local str3 = arg .. "-" .. arg
-	local ok3, result3 = pcall(function()
-		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
-	end)
+	local ok3, result3 = pcall(function() return ItemId.getId(str3, "PhysicalMoveset"):asNullable() end)
 	if not ok3 or not result3 then
 		spriteCache[arg] = false
 		return nil
 	end
 	local itemId = type(result3) == "table" and (result3.ItemId or result3.Id) or result3
-	local ok4, result4 = pcall(function()
-		return ItemConfig.tryGet(itemId)
-	end)
+	local ok4, result4 = pcall(function() return ItemConfig.tryGet(itemId) end)
 	if ok4 and type(result4) == "table" and result4.Display and result4.Display.Sprite then
 		spriteCache[arg] = result4.Display.Sprite
 		return result4.Display.Sprite
@@ -182,10 +185,9 @@ local function getFruitSprite(arg)
 end
 
 local function getFruitItemId(arg)
+	if not ItemId then return nil end
 	local str3 = arg .. "-" .. arg
-	local ok3, result3 = pcall(function()
-		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
-	end)
+	local ok3, result3 = pcall(function() return ItemId.getId(str3, "PhysicalMoveset"):asNullable() end)
 	if not ok3 or not result3 then return nil end
 	return type(result3) == "table" and (result3.ItemId or result3.Id) or result3
 end
@@ -227,38 +229,17 @@ local function registerFruit(arg, arg2)
 end
 
 local allFruitsList = {
-	registerFruit("Spin", 0),
-	registerFruit("Smoke", 0),
-	registerFruit("Blade", 0),
-	registerFruit("Bomb", 0),
-	registerFruit("Spike", 0),
-	registerFruit("Rocket", 0),
-	registerFruit("Sand", 1),
-	registerFruit("Ice", 1),
-	registerFruit("Flame", 1),
-	registerFruit("Dark", 1),
-	registerFruit("Eagle", 1),
-	registerFruit("Light", 2),
-	registerFruit("Rubber", 2),
-	registerFruit("Magma", 2),
-	registerFruit("Buddha", 3),
-	registerFruit("Portal", 3),
-	registerFruit("Lightning", 3),
-	registerFruit("Pain", 3),
-	registerFruit("Shadow", 4),
-	registerFruit("Control", 4),
-	registerFruit("Tiger", 4),
-	registerFruit("Gravity", 4),
-	registerFruit("Dragon (East)", 4),
-	registerFruit("Gas", 4),
-	registerFruit("Kitsune", 4),
-	registerFruit("Dough", 4),
-	registerFruit("Yeti", 4),
-	registerFruit("Dragon (West)", 4),
-	registerFruit("T-Rex", 4),
-	registerFruit("Mammoth", 4),
-	registerFruit("Spirit", 4),
-	registerFruit("Venom", 4),
+	registerFruit("Spin", 0), registerFruit("Smoke", 0), registerFruit("Blade", 0),
+	registerFruit("Bomb", 0), registerFruit("Spike", 0), registerFruit("Rocket", 0),
+	registerFruit("Sand", 1), registerFruit("Ice", 1), registerFruit("Flame", 1),
+	registerFruit("Dark", 1), registerFruit("Eagle", 1), registerFruit("Light", 2),
+	registerFruit("Rubber", 2), registerFruit("Magma", 2), registerFruit("Buddha", 3),
+	registerFruit("Portal", 3), registerFruit("Lightning", 3), registerFruit("Pain", 3),
+	registerFruit("Shadow", 4), registerFruit("Control", 4), registerFruit("Tiger", 4),
+	registerFruit("Gravity", 4), registerFruit("Dragon (East)", 4), registerFruit("Gas", 4),
+	registerFruit("Kitsune", 4), registerFruit("Dough", 4), registerFruit("Yeti", 4),
+	registerFruit("Dragon (West)", 4), registerFruit("T-Rex", 4), registerFruit("Mammoth", 4),
+	registerFruit("Spirit", 4), registerFruit("Venom", 4),
 }
 
 pcall(function()
@@ -286,9 +267,9 @@ for _, v5 in pairs(allFruitsList) do
 end
 
 local ownedMythPool = {}
-local replicatedFruits = playerGui:FindFirstChild("__ReplicatedFruits") or Instance.new("Folder")
+local replicatedFruits = playerGui and playerGui:FindFirstChild("__ReplicatedFruits") or Instance.new("Folder")
 replicatedFruits.Name = "__ReplicatedFruits"
-replicatedFruits.Parent = playerGui
+if playerGui then replicatedFruits.Parent = playerGui end
 local loadedModelFlags = {}
 local cachedFruitModels = {}
 
@@ -307,7 +288,7 @@ local function getPrimeTool(fruitName)
 		table.insert(candidates, baseName)
 	end
 	for _, name in ipairs(candidates) do
-		local tool = LocalPlayer.Backpack:FindFirstChild(name)
+		local tool = LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild(name)
 		if tool and tool:IsA("Tool") and not tool:GetAttribute("X10Fake") then return tool end
 		local charTool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name)
 		if charTool and charTool:IsA("Tool") and not charTool:GetAttribute("X10Fake") then return charTool end
@@ -316,6 +297,7 @@ local function getPrimeTool(fruitName)
 end
 
 local function attachFakeFruitActions(arg, arg2, arg3)
+	if not DialogueController then return end
 	local str3, str4
 	if arg3 == "Dragon (East)" then
 		str3 = "Dragon-Dragon"; str4 = "East"
@@ -332,19 +314,25 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 	local function eatFruit()
 		task.spawn(function()
 			local character = LocalPlayer.Character
+			if not character then return end
 			local humanoid = character:FindFirstChildWhichIsA("Humanoid")
-			local animator = humanoid:FindFirstChildWhichIsA("Animator")
-			local animation = Instance.new("Animation")
-			animation.AnimationId = "rbxassetid://10851812420"
-			local v5 = animator:LoadAnimation(animation)
-			v5.Priority = Enum.AnimationPriority.Action
-			v5:Play()
-			local sound = Instance.new("Sound")
-			sound.SoundId = "rbxassetid://11568102939"
-			sound.Volume = 2
-			sound.Parent = character:FindFirstChild("HumanoidRootPart")
-			sound:Play()
-			sound.Ended:Connect(function() sound:Destroy() end)
+			local animator = humanoid and humanoid:FindFirstChildWhichIsA("Animator")
+			if animator then
+				local animation = Instance.new("Animation")
+				animation.AnimationId = "rbxassetid://10851812420"
+				local v5 = animator:LoadAnimation(animation)
+				v5.Priority = Enum.AnimationPriority.Action
+				v5:Play()
+			end
+			local hrp = character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local sound = Instance.new("Sound")
+				sound.SoundId = "rbxassetid://11568102939"
+				sound.Volume = 2
+				sound.Parent = hrp
+				sound:Play()
+				sound.Ended:Connect(function() sound:Destroy() end)
+			end
 
 			task.wait(3)
 
@@ -353,16 +341,20 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 			local flag4 = arg.Parent == character and arg or nil
 			if flag4 and flag4:IsA("Tool") then flag4:Destroy() end
 
-			if hasPrime then
-				if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end
-			else
-				local cloneTool = LocalPlayer.Backpack:FindFirstChild(arg3 .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(arg.Name)
-				if cloneTool and cloneTool:IsA("Tool") then
-					humanoid:EquipTool(cloneTool)
-					task.wait(0.5)
-					pcall(function() commF:InvokeServer("SwitchFruit", cloneTool.Name:gsub(" Fruit$", "")) end)
+			if commF then
+				if hasPrime then
+					pcall(function()
+						if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end
+					end)
 				else
-					pcall(function() if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end end)
+					local cloneTool = LocalPlayer.Backpack:FindFirstChild(arg3 .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(arg.Name)
+					if cloneTool and cloneTool:IsA("Tool") and humanoid then
+						humanoid:EquipTool(cloneTool)
+						task.wait(0.5)
+						pcall(function() commF:InvokeServer("SwitchFruit", cloneTool.Name:gsub(" Fruit$", "")) end)
+					else
+						pcall(function() if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end end)
+					end
 				end
 			end
 		end)
@@ -400,9 +392,9 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 					task.spawn(function()
 						task.wait()
 						local character = LocalPlayer.Character
-						local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+						local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
 						local flag4 = arg.Parent == character and arg or nil
-						if not flag4 or not flag4:IsA("Tool") then return end
+						if not flag4 or not flag4:IsA("Tool") or not humanoid then return end
 						local handle = flag4:FindFirstChild("Handle")
 						local cFrame = handle and handle.CFrame or character:FindFirstChild("HumanoidRootPart").CFrame
 						humanoid:UnequipTools()
@@ -436,7 +428,7 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 					task.spawn(function()
 						local success = pcall(function()
 							local toolToStore = getPrimeTool(str3) or arg
-							commF:InvokeServer("StoreFruit", str3, toolToStore)
+							if commF then commF:InvokeServer("StoreFruit", str3, toolToStore) end
 						end)
 						if success then arg6:addText("[Blox Fruit stored.]") else arg6:addText("[Failed to store fruit.]") end
 						arg6:advanceAfterDelay(1.5)
@@ -448,12 +440,11 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 		DialogueController.start(v5)
 	end
 
-	arg.Activated:Connect(function()
-		pcall(openDialogue)
-	end)
+	arg.Activated:Connect(function() pcall(openDialogue) end)
 end
 
 local function injectPreviewModel(arg)
+	if not playerGui then return end
 	local v5 = cachedFruitModels[arg.StorageName]
 	local fruit = v5 and v5:FindFirstChild("Fruit")
 	local itemId = arg.ItemId
@@ -484,7 +475,8 @@ local function injectPreviewModel(arg)
 	clone:SetAttribute("__Size", clone:GetExtentsSize())
 	clone.Parent = replicatedSpinnerInstances
 	task.spawn(function()
-		local Spinner = require(ReplicatedStorage.Controllers.UI.Spinner)
+		local okSp, Spinner = pcall(function() return require(ReplicatedStorage.Controllers.UI.Spinner) end)
+		if not okSp or not Spinner then return end
 		local now = tick()
 		while tick() - now < 5 and not Spinner:IsOpen() do task.wait(0.1) end
 		while tick() - now < 600 and Spinner:IsOpen() do task.wait(0.5) end
@@ -497,9 +489,7 @@ local onGachaRollFinished = nil
 local function executeGachaRoll(arg, arg2)
 	local v6 = nextSelectedFruit or pickCandidateFruit(arg)
 	nextSelectedFruit = pickCandidateFruit(arg)
-	if onGachaRollFinished then
-		task.spawn(onGachaRollFinished, nextSelectedFruit)
-	end
+	if onGachaRollFinished then task.spawn(onGachaRollFinished, nextSelectedFruit) end
 
 	task.spawn(function()
 		pcall(function()
@@ -509,7 +499,7 @@ local function executeGachaRoll(arg, arg2)
 		if arg and loadedModelFlags[v6.StorageName] then
 			local storageName = v6.StorageName
 			local v7 = cachedFruitModels[storageName]
-			if v7 then
+			if v7 and LocalPlayer.Backpack then
 				local clone = v7:Clone()
 				clone.Name = v6.DisplayName .. " Fruit"
 				clone:SetAttribute("X10Fake", true)
@@ -537,7 +527,8 @@ local function executeGachaRoll(arg, arg2)
 end
 
 local function hasEnoughBeli(arg)
-	return LocalPlayer.Data.Beli.Value >= arg
+	local ok, val = pcall(function() return LocalPlayer.Data.Beli.Value end)
+	return ok and (val >= arg) or false
 end
 
 local currentPrice = 0
@@ -620,7 +611,10 @@ local function attachPurchaseOverlay(parent)
 	textButton.Activated:Connect(function()
 		if clicked then return end
 		if not gachaFlags.bypassCash and not hasEnoughBeli(currentPrice) then
-			setButtonOverrideText(("Need $%s more"):format(TextUtil.commaValue(currentPrice - LocalPlayer.Data.Beli.Value)))
+			local diff = 0
+			pcall(function() diff = currentPrice - LocalPlayer.Data.Beli.Value end)
+			local formatted = TextUtil and TextUtil.commaValue and TextUtil.commaValue(diff) or tostring(diff)
+			setButtonOverrideText(("Need $%s more"):format(formatted))
 			task.delay(2, function() if textButton.Parent then setButtonOverrideText(gachaFlags.bypassCash and "FREE" or nil) end end)
 			return
 		end
@@ -628,10 +622,10 @@ local function attachPurchaseOverlay(parent)
 		task.delay(0.5, function()
 			gachaHookActive = false
 			textButton:Destroy()
-			pcall(function() GachaWindow:Close() end)
+			pcall(function() if GachaWindow then GachaWindow:Close() end end)
 			task.delay(0.5, function()
-				local ok3, result3 = pcall(function() return GachaWindow:IsOpen() end)
-				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
+				local ok3, result3 = pcall(function() return GachaWindow and GachaWindow:IsOpen() end)
+				local ziolesGachaWindow = playerGui and playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow and ziolesGachaWindow.Enabled and (not ok3 or result3) then ziolesGachaWindow.Enabled = false end
 			end)
 			executeGachaRoll(gachaFlags.boostLuck)
@@ -655,49 +649,53 @@ local function processZiolesDescendant(arg)
 	end
 end
 
-playerGui.DescendantAdded:Connect(function(descendant)
-	if gachaHookActive then processZiolesDescendant(descendant) end
-end)
+if playerGui then
+	playerGui.DescendantAdded:Connect(function(descendant)
+		if gachaHookActive then processZiolesDescendant(descendant) end
+	end)
+end
 
-GachaWindow.Open = function(arg, arg2, arg3, ...)
-	if arg2 == "ZiolesGacha" then
-		resetGachaHooks()
-		gachaHookActive = false
-		if not nextSelectedFruit then
-			nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
-		end
-		if gachaFlags.boostLuck or gachaFlags.bypassCash or gachaFlags.bypassTime then
-			currentPrice = type(arg3) == "table" and tonumber(arg3.Value) or 0
-			gachaHookActive = true
-			overrideText = gachaFlags.bypassCash and "FREE" or nil
-			local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
-			if ziolesGachaWindow then
-				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do
-					if descendant.Name == "FakeOverlay" then descendant:Destroy() end
-				end
-				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
+if GachaWindow and origGachaOpen then
+	GachaWindow.Open = function(arg, arg2, arg3, ...)
+		if arg2 == "ZiolesGacha" then
+			resetGachaHooks()
+			gachaHookActive = false
+			if not nextSelectedFruit then
+				nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
 			end
-		end
-	end
-
-	if arg2 == "ZiolesGacha" and gachaHookActive then
-		for _, v5 in ipairs({ 0, 0.05, 0.15, 0.3, 0.6 }) do
-			task.delay(v5, function()
-				if not gachaHookActive then return end
-				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
+			if gachaFlags.boostLuck or gachaFlags.bypassCash or gachaFlags.bypassTime then
+				currentPrice = type(arg3) == "table" and tonumber(arg3.Value) or 0
+				gachaHookActive = true
+				overrideText = gachaFlags.bypassCash and "FREE" or nil
+				local ziolesGachaWindow = playerGui and playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow then
+					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do
+						if descendant.Name == "FakeOverlay" then descendant:Destroy() end
+					end
 					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
 				end
-			end)
+			end
 		end
-	end
 
-	local v5 = table.pack(...)
-	local v6 = origGachaOpen
-	v5.n = 4 + v5.n - 1
-	table.move(v5, 1, v5.n, 4, v5)
-	v5[1] = arg; v5[2] = arg2; v5[3] = arg3
-	return v6(table.unpack(v5, 1, v5.n))
+		if arg2 == "ZiolesGacha" and gachaHookActive then
+			for _, v5 in ipairs({ 0, 0.05, 0.15, 0.3, 0.6 }) do
+				task.delay(v5, function()
+					if not gachaHookActive then return end
+					local ziolesGachaWindow = playerGui and playerGui:FindFirstChild("ZiolesGacha_Window")
+					if ziolesGachaWindow then
+						for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
+					end
+				end)
+			end
+		end
+
+		local v5 = table.pack(...)
+		local v6 = origGachaOpen
+		v5.n = 4 + v5.n - 1
+		table.move(v5, 1, v5.n, 4, v5)
+		v5[1] = arg; v5[2] = arg2; v5[3] = arg3
+		return v6(table.unpack(v5, 1, v5.n))
+	end
 end
 
 ------------------------------------------------------------------------
@@ -784,6 +782,34 @@ local function fadeEdges(mid)
 	return NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, mid or 0), NumberSequenceKeypoint.new(1, 1) })
 end
 
+-- Universal Dragging Function (Works cleanly on Mobile Touch & PC Mouse)
+local function makeDraggable(dragHandle, targetFrame)
+	local dragging, dragInput, dragStart, startPos
+	bind(dragHandle.InputBegan, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = targetFrame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+	bind(dragHandle.InputChanged, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	bind(UIS.InputChanged, function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			targetFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
 local SWIRL_T = NumberSequence.new({
 	NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.55, 0.1),
 	NumberSequenceKeypoint.new(0.6, 1), NumberSequenceKeypoint.new(1, 1) })
@@ -815,17 +841,45 @@ local function paintFruit(f, rarity)
 end
 
 ------------------------------------------------------------------------
--- SCREEN GUI (Clean Edges - No Protruding Outlines)
+-- SCREEN GUI (SAFE MULTI-EXECUTOR PARENTING)
 ------------------------------------------------------------------------
 local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false, IgnoreGuiInset = true,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999 })
-local parented = false
-if typeof(gethui) == "function" then parented = pcall(function() gui.Parent = gethui() end) end
-if not parented then parented = pcall(function() gui.Parent = game:GetService("CoreGui") end) end
-if not parented then gui.Parent = playerGui end
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999999 })
+
+local function mountGui(targetGui)
+	local ok = false
+	if typeof(gethui) == "function" then
+		ok = pcall(function() targetGui.Parent = gethui() end)
+	end
+	if (not ok or not targetGui.Parent) and CoreGui then
+		ok = pcall(function() targetGui.Parent = CoreGui end)
+	end
+	if (not ok or not targetGui.Parent) and playerGui then
+		targetGui.Parent = playerGui
+	end
+end
+mountGui(gui)
 
 local W, H, HEADER = 276, 404, 42
 local CARD_W, CARD_H = W - 20, 174
+
+-- Mobile / Quick Floating Toggle Button
+local FloatBtn = new("TextButton", {
+	Name = "MobileToggleBtn",
+	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(0, 14, 0.45, 0),
+	Size = UDim2.fromOffset(44, 44),
+	BackgroundColor3 = C.bg1,
+	AutoButtonColor = false,
+	Text = "",
+	ZIndex = 50,
+	Parent = gui,
+}, { circle() })
+local floatStroke = stroke(C.cyan, 2, 0); floatStroke.Parent = FloatBtn
+local floatGrad = grad({ C.cyan, C.blue, C.purple, C.cyan }, 45); floatGrad.Parent = floatStroke
+local floatFruit = makeFruit(FloatBtn, 24, 51)
+floatFruit.grad.Color = ColorSequence.new(C.cyan, C.purple)
+makeDraggable(FloatBtn, FloatBtn)
 
 local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 24),
 	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ClipsDescendants = false, Parent = gui })
@@ -833,7 +887,6 @@ local rootScale = new("UIScale", { Parent = Holder })
 local Pop = frame({ Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Holder })
 local mainScale = new("UIScale", { Scale = 0.9, Parent = Pop })
 
--- تم ضبط الحواف الخارجية لتكون مطابقة تماماً لإطار Main بدون أي بروز
 local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1),
 	BackgroundColor3 = C.blue, BackgroundTransparency = 0.88, ZIndex = 1, Parent = Pop }, { corner(14) })
 
@@ -847,7 +900,6 @@ local borderGrad = grad({ C.cyan, C.blue, C.purple, C.blue, C.cyan }, 0); border
 ------------------------------------------------------------------------
 local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Main },
 	{ corner(14), grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
--- تغطية الزوايا السفلية للهيدر لتندمج بسلاسة مع جسم الواجهة
 frame({ Position = UDim2.new(0, 0, 1, -12), Size = UDim2.new(1, 0, 0, 12), BackgroundColor3 = C.white, BorderSizePixel = 0, ZIndex = 4, Parent = Header },
 	{ grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
 
@@ -867,13 +919,13 @@ local brandLbl = label({ Position = UDim2.fromOffset(45, 23), Size = UDim2.new(1
 local brandGrad = grad({ C.cyan, C.blue, C.purple, C.cyan }, 0); brandGrad.Parent = brandLbl
 
 local function headerButton(text, xOff)
-	local b = new("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, xOff, 0, 10), Size = UDim2.fromOffset(22, 22),
+	local b = new("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, xOff, 0, 8), Size = UDim2.fromOffset(26, 26),
 		BackgroundColor3 = C.panel, AutoButtonColor = false, Text = text, Font = F_TITLE, TextSize = 15,
 		TextColor3 = C.text, ZIndex = 6, Parent = Header }, { corner(7), textStroke(C.ink, 1) })
 	local s = stroke(C.line, 1.2, 0); s.Parent = b
 	return b, s
 end
-local MinBtn, minStroke = headerButton("–", -36)
+local MinBtn, minStroke = headerButton("–", -40)
 local CloseBtn, closeStroke = headerButton("X", -10)
 
 frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan,
@@ -885,7 +937,7 @@ frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2),
 local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
 	BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = Main })
 
--- Toggle row (Show Next Dealer Fruit)
+-- Toggle row
 local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
 	ZIndex = 4, Parent = Body }, { corner(10) })
 local toggleRowStroke = stroke(C.line, 1.2, 0); toggleRowStroke.Parent = ToggleRow
@@ -901,7 +953,7 @@ local Knob = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 
 	BackgroundColor3 = Color3.fromRGB(185, 192, 212), ZIndex = 6, Parent = Switch }, { circle() })
 local ToggleHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 7, Parent = ToggleRow })
 
--- Quick Toggle Bar ABOVE Preview Card (Boost Luck + Bypass Time + Bypass Money)
+-- Quick Toggle Bar
 local QuickBar = frame({ Name = "QuickBar", Position = UDim2.fromOffset(10, 50), Size = UDim2.new(1, -20, 0, 34),
 	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
 new("UIListLayout", {
@@ -1033,7 +1085,7 @@ local ScanLine = frame({ Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan
 frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = C.cyan, ZIndex = 7, Parent = ScanLine },
 	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.8) }) })
 
--- Reel view (يعرض صور الفواكه الحقيقية التي ستسقط بدلاً من الرسمة الافتراضية)
+-- Reel view
 label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
 	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
 local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 84), Size = UDim2.fromOffset(204, 74),
@@ -1128,11 +1180,12 @@ local DiscordBtn = new("TextButton", {
 }, { corner(6), textStroke(C.ink, 1) })
 stroke(C.white, 1, 0.7).Parent = DiscordBtn
 
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local HideHintLbl = label({
 	AnchorPoint = Vector2.new(1, 0.5),
 	Position = UDim2.new(1, 0, 0.5, 0),
 	Size = UDim2.new(0.45, 0, 1, 0),
-	Text = CONFIG.ToggleKey.Name .. " = hide",
+	Text = isMobile and "Tap Icon = hide" or (CONFIG.ToggleKey.Name .. " = hide"),
 	TextSize = 9,
 	TextColor3 = C.sub,
 	TextXAlignment = Enum.TextXAlignment.Right,
@@ -1305,7 +1358,7 @@ local function shake(power)
 end
 
 ------------------------------------------------------------------------
--- REEL (REAL FRUIT SPRITES) + REVEAL
+-- REEL + REVEAL
 ------------------------------------------------------------------------
 local function applyReelFruitVisual(fruitName, rarityName, spriteData)
 	local col = rarityInfo(rarityName).color
@@ -1515,9 +1568,7 @@ end
 local function toggleGachaFlag(key)
 	gachaFlags[key] = not gachaFlags[key]
 	local isOn = gachaFlags[key]
-	if quickButtonRefs[key] then
-		quickButtonRefs[key](isOn)
-	end
+	if quickButtonRefs[key] then quickButtonRefs[key](isOn) end
 
 	if key == "boostLuck" then
 		nextSelectedFruit = pickCandidateFruit(isOn)
@@ -1530,11 +1581,11 @@ local function toggleGachaFlag(key)
 	end
 end
 
-bind(BoostLuckBtn.MouseButton1Click, function() toggleGachaFlag("boostLuck") end)
-bind(BypassTimeBtn.MouseButton1Click, function() toggleGachaFlag("bypassTime") end)
-bind(BypassMoneyBtn.MouseButton1Click, function() toggleGachaFlag("bypassCash") end)
+bind(BoostLuckBtn.Activated, function() toggleGachaFlag("boostLuck") end)
+bind(BypassTimeBtn.Activated, function() toggleGachaFlag("bypassTime") end)
+bind(BypassMoneyBtn.Activated, function() toggleGachaFlag("bypassCash") end)
 
-bind(DiscordBtn.MouseButton1Click, function()
+bind(DiscordBtn.Activated, function()
 	local copied = false
 	if typeof(setclipboard) == "function" then
 		copied = pcall(setclipboard, CONFIG.DiscordInvite)
@@ -1551,7 +1602,7 @@ bind(DiscordBtn.MouseButton1Click, function()
 	end)
 end)
 
-bind(ToggleHit.MouseButton1Click, function() setEnabled(not state.enabled) end)
+bind(ToggleHit.Activated, function() setEnabled(not state.enabled) end)
 bind(ToggleHit.MouseEnter, function() tween(ToggleRow, 0.2, { BackgroundColor3 = Color3.fromRGB(36, 43, 68) }) end)
 bind(ToggleHit.MouseLeave, function() tween(ToggleRow, 0.2, { BackgroundColor3 = C.panel }) end)
 
@@ -1559,7 +1610,7 @@ bind(RefreshBtn.MouseEnter, function() tween(RefreshBtn, 0.15, { Position = UDim
 bind(RefreshBtn.MouseLeave, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -2) }) end)
 bind(RefreshBtn.MouseButton1Down, function() tween(RefreshBtn, 0.06, { Position = UDim2.fromOffset(0, 0) }) end)
 bind(RefreshBtn.MouseButton1Up, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -2) }, Enum.EasingStyle.Back) end)
-bind(RefreshBtn.MouseButton1Click, function()
+bind(RefreshBtn.Activated, function()
 	if not state.enabled then
 		toggleRowStroke.Color = C.cyan
 		tween(ToggleRow, 0.08, { Position = UDim2.fromOffset(15, 8) }).Completed:Connect(function()
@@ -1578,7 +1629,7 @@ end
 headerHover(MinBtn, minStroke, C.blue)
 headerHover(CloseBtn, closeStroke, C.red)
 
-bind(MinBtn.MouseButton1Click, function()
+bind(MinBtn.Activated, function()
 	state.minimized = not state.minimized
 	MinBtn.Text = state.minimized and "+" or "–"
 	tween(Holder, 0.35, { Size = UDim2.fromOffset(W, state.minimized and HEADER or H) })
@@ -1593,37 +1644,34 @@ local function destroy()
 end
 ENV.__FruitSpinPredictorDestroy = destroy
 
-bind(CloseBtn.MouseButton1Click, function()
+bind(CloseBtn.Activated, function()
 	fadeAll(snapshot(Holder), false, 0.22)
 	tween(mainScale, 0.25, { Scale = 0.9 })
 	task.delay(0.27, destroy)
 end)
 
+-- Toggle Window via Keyboard OR Floating Button
+bind(FloatBtn.Activated, function()
+	Holder.Visible = not Holder.Visible
+end)
+
 bind(UIS.InputBegan, function(input, gp)
-	if not gp and input.KeyCode == CONFIG.ToggleKey then Holder.Visible = not Holder.Visible end
-end)
-
-local dragging, dragStart, startPos
-bind(Header.InputBegan, function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging, dragStart, startPos = true, input.Position, Holder.Position
-		local c; c = input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then dragging = false; c:Disconnect() end
-		end)
-	end
-end)
-bind(UIS.InputChanged, function(input)
-	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local d = input.Position - dragStart
-		Holder.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	if not gp and input.KeyCode == CONFIG.ToggleKey then
+		Holder.Visible = not Holder.Visible
 	end
 end)
 
+-- Enable Touch & Mouse Dragging on Header
+makeDraggable(Header, Holder)
+
+-- Mobile-Friendly Responsive Scaling
 local function rescale()
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 	local vp = cam.ViewportSize
-	rootScale.Scale = math.clamp(math.min(vp.X / (W + 80), vp.Y / (H + 80)), 0.7, 1)
+	local scaleX = (vp.X - 40) / W
+	local scaleY = (vp.Y - 40) / H
+	rootScale.Scale = math.clamp(math.min(scaleX, scaleY), 0.55, 1)
 end
 rescale()
 if workspace.CurrentCamera then bind(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), rescale) end
@@ -1632,6 +1680,7 @@ if workspace.CurrentCamera then bind(workspace.CurrentCamera:GetPropertyChangedS
 -- BACKGROUND PRELOAD OF MYTHICAL FRUIT MODELS FROM INVENTORY
 ------------------------------------------------------------------------
 task.spawn(function()
+	if not commF then return end
 	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local inv = getInventory()
 	local mythItems = {}
@@ -1652,7 +1701,7 @@ task.spawn(function()
 			local toolFound = nil
 			local now = tick()
 			while tick() - now < 3 do
-				local found = LocalPlayer.Backpack:FindFirstChild(displayName .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(item.Name .. " Fruit")
+				local found = LocalPlayer.Backpack and (LocalPlayer.Backpack:FindFirstChild(displayName .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(item.Name .. " Fruit"))
 				if found then toolFound = found; break else task.wait(0.1) end
 			end
 
@@ -1666,7 +1715,8 @@ task.spawn(function()
 					if humanoid then
 						humanoid:EquipTool(toolFound)
 						task.wait(1)
-						local charModel = workspace.Characters:FindFirstChild(LocalPlayer.Name)
+						local charsFolder = workspace:FindFirstChild("Characters")
+						local charModel = charsFolder and charsFolder:FindFirstChild(LocalPlayer.Name)
 						if charModel then
 							charModel = charModel:FindFirstChild(displayName .. " Fruit") or charModel:FindFirstChild(item.Name .. " Fruit")
 						end
@@ -1712,10 +1762,12 @@ local T, partAcc, starAcc, boltAcc, shineAcc, waveAcc = 0, 0, 0, 0, 0, 0
 bind(RunService.Heartbeat, function(dt)
 	T += dt
 	borderGrad.Rotation = (T * 55) % 360
+	floatGrad.Rotation = (T * 75) % 360
 	local wave = math.sin(T * 1.4)
 	brandGrad.Offset = Vector2.new(wave * 0.35, 0)
 	if state.enabled then refreshGrad.Offset = Vector2.new(math.sin(T * 1.2) * 0.25, 0) end
 	headFruit.body.Rotation = math.sin(T * 2) * 8
+	floatFruit.body.Rotation = math.sin(T * 2.5) * 10
 
 	for _, L in ipairs(waves) do
 		local span = #L.dots * L.gap
