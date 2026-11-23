@@ -1,13 +1,3 @@
---[[
-    Fruit Spin Predictor  •  Blox Fruits UI  (Merged Edition)
-    Discord: https://discord.gg/V7DYYebjHD
-    ------------------------------------------------------------------
-    RightControl hides / shows the window.
-]]
-
-------------------------------------------------------------------------
--- CONFIG
-------------------------------------------------------------------------
 local CONFIG = {
 	PredictionURL      = "",
 	DiscordInvite      = "https://discord.gg/V7DYYebjHD",
@@ -20,8 +10,6 @@ local CONFIG = {
 	Version            = "v2.6",
 	ToggleKey          = Enum.KeyCode.RightControl,
 }
-
-local FRUIT_ICONS = {}
 
 local FRUITS = {
 	Common    = {"Rocket","Spin","Blade","Spring","Bomb","Smoke","Spike"},
@@ -43,19 +31,41 @@ local TweenService       = game:GetService("TweenService")
 local RunService         = game:GetService("RunService")
 local UIS                = game:GetService("UserInputService")
 local HttpService        = game:GetService("HttpService")
+
 local LocalPlayer        = Players.LocalPlayer
-local playerGui          = LocalPlayer:WaitForChild("PlayerGui")
+while not LocalPlayer do
+	Players.PlayerAdded:Wait()
+	LocalPlayer = Players.LocalPlayer
+end
+local playerGui          = LocalPlayer:WaitForChild("PlayerGui", 15)
 
-local DialogueController = require(ReplicatedStorage.DialogueController)
-local GachaWindow        = require(ReplicatedStorage.Controllers.UI.GachaWindow)
-local commF              = ReplicatedStorage.Remotes.CommF_
-local origGachaOpen      = GachaWindow.Open
-local TextUtil           = require(ReplicatedStorage.Modules.Util.TextUtil)
-local ItemId             = require(ReplicatedStorage.Economy.ItemId)
-local ItemConfig         = require(ReplicatedStorage.ItemConfig)
+local function safeReq(fn)
+	local ok, res = pcall(fn)
+	return ok and res or nil
+end
 
-local ENV = (typeof(getgenv) == "function" and getgenv()) or _G
-if ENV.__FruitSpinPredictorDestroy then pcall(ENV.__FruitSpinPredictorDestroy) end
+local DialogueController = safeReq(function() return require(ReplicatedStorage.DialogueController) end)
+local GachaWindow        = safeReq(function() return require(ReplicatedStorage.Controllers.UI.GachaWindow) end)
+local commF              = safeReq(function() return ReplicatedStorage.Remotes.CommF_ end)
+local origGachaOpen      = GachaWindow and GachaWindow.Open or nil
+local TextUtil           = safeReq(function() return require(ReplicatedStorage.Modules.Util.TextUtil) end)
+local ItemId             = safeReq(function() return require(ReplicatedStorage.Economy.ItemId) end)
+local ItemConfig         = safeReq(function() return require(ReplicatedStorage.ItemConfig) end)
+
+-- إصلاح مشكلة ENV / getgenv التي تسبب attempt to call a nil value
+local ENV = _G
+pcall(function()
+	if typeof(getgenv) == "function" then
+		local g = getgenv()
+		if type(g) == "table" then
+			ENV = g
+		end
+	end
+end)
+
+if type(ENV) == "table" and type(ENV.__FruitSpinPredictorDestroy) == "function" then
+	pcall(ENV.__FruitSpinPredictorDestroy)
+end
 
 local FRUIT_LOOKUP, REEL_LIST = {}, {}
 for _, rarity in ipairs({ "Common", "Uncommon", "Rare", "Legendary", "Mythical" }) do
@@ -67,12 +77,13 @@ end
 for old, cur in pairs(ALIASES) do FRUIT_LOOKUP[old:lower()] = FRUIT_LOOKUP[cur:lower()] end
 
 ------------------------------------------------------------------------
--- GACHA & INVENTORY LOGIC (FROM X100 LUCKY)
+-- GACHA & INVENTORY LOGIC
 ------------------------------------------------------------------------
 local gachaFlags = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false }
 local nextSelectedFruit = nil
 
 local function getInventory()
+	if not ItemConfig then return {} end
 	local ok3, result3 = pcall(function()
 		local ItemReplicationService = require(ReplicatedStorage.ItemReplicationService)
 		local KEYS = require(ReplicatedStorage.ItemReplicationService.KEYS)
@@ -144,7 +155,8 @@ local function getInventory()
 end
 
 local function genUID()
-	return HttpService:GenerateGUID(false)
+	local ok, id = pcall(function() return HttpService:GenerateGUID(false) end)
+	return ok and id or tostring(math.random(100000, 999999))
 end
 
 local RARITY_NAMES = { [0] = "Common", "Uncommon", "Rare", "Legendary", "Mythical" }
@@ -160,6 +172,10 @@ local spriteCache = {}
 local function getFruitSprite(arg)
 	if spriteCache[arg] ~= nil then
 		return spriteCache[arg] or nil
+	end
+	if not ItemId or not ItemConfig then
+		spriteCache[arg] = false
+		return nil
 	end
 	local str3 = arg .. "-" .. arg
 	local ok3, result3 = pcall(function()
@@ -182,6 +198,7 @@ local function getFruitSprite(arg)
 end
 
 local function getFruitItemId(arg)
+	if not ItemId then return nil end
 	local str3 = arg .. "-" .. arg
 	local ok3, result3 = pcall(function()
 		return ItemId.getId(str3, "PhysicalMoveset"):asNullable()
@@ -316,6 +333,7 @@ local function getPrimeTool(fruitName)
 end
 
 local function attachFakeFruitActions(arg, arg2, arg3)
+	if not DialogueController then return end
 	local str3, str4
 	if arg3 == "Dragon (East)" then
 		str3 = "Dragon-Dragon"; str4 = "East"
@@ -332,19 +350,25 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 	local function eatFruit()
 		task.spawn(function()
 			local character = LocalPlayer.Character
+			if not character then return end
 			local humanoid = character:FindFirstChildWhichIsA("Humanoid")
-			local animator = humanoid:FindFirstChildWhichIsA("Animator")
-			local animation = Instance.new("Animation")
-			animation.AnimationId = "rbxassetid://10851812420"
-			local v5 = animator:LoadAnimation(animation)
-			v5.Priority = Enum.AnimationPriority.Action
-			v5:Play()
-			local sound = Instance.new("Sound")
-			sound.SoundId = "rbxassetid://11568102939"
-			sound.Volume = 2
-			sound.Parent = character:FindFirstChild("HumanoidRootPart")
-			sound:Play()
-			sound.Ended:Connect(function() sound:Destroy() end)
+			local animator = humanoid and humanoid:FindFirstChildWhichIsA("Animator")
+			if animator then
+				local animation = Instance.new("Animation")
+				animation.AnimationId = "rbxassetid://10851812420"
+				local v5 = animator:LoadAnimation(animation)
+				v5.Priority = Enum.AnimationPriority.Action
+				v5:Play()
+			end
+			local hrp = character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local sound = Instance.new("Sound")
+				sound.SoundId = "rbxassetid://11568102939"
+				sound.Volume = 2
+				sound.Parent = hrp
+				sound:Play()
+				sound.Ended:Connect(function() sound:Destroy() end)
+			end
 
 			task.wait(3)
 
@@ -353,16 +377,20 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 			local flag4 = arg.Parent == character and arg or nil
 			if flag4 and flag4:IsA("Tool") then flag4:Destroy() end
 
-			if hasPrime then
-				if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end
-			else
-				local cloneTool = LocalPlayer.Backpack:FindFirstChild(arg3 .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(arg.Name)
-				if cloneTool and cloneTool:IsA("Tool") then
-					humanoid:EquipTool(cloneTool)
-					task.wait(0.5)
-					pcall(function() commF:InvokeServer("SwitchFruit", cloneTool.Name:gsub(" Fruit$", "")) end)
+			if commF then
+				if hasPrime then
+					pcall(function()
+						if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end
+					end)
 				else
-					pcall(function() if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end end)
+					local cloneTool = LocalPlayer.Backpack:FindFirstChild(arg3 .. " Fruit") or LocalPlayer.Backpack:FindFirstChild(arg.Name)
+					if cloneTool and cloneTool:IsA("Tool") and humanoid then
+						humanoid:EquipTool(cloneTool)
+						task.wait(0.5)
+						pcall(function() commF:InvokeServer("SwitchFruit", cloneTool.Name:gsub(" Fruit$", "")) end)
+					else
+						pcall(function() if str4 then commF:InvokeServer("SwitchFruit", str3, str4) else commF:InvokeServer("SwitchFruit", str3) end end)
+					end
 				end
 			end
 		end)
@@ -400,9 +428,9 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 					task.spawn(function()
 						task.wait()
 						local character = LocalPlayer.Character
-						local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+						local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
 						local flag4 = arg.Parent == character and arg or nil
-						if not flag4 or not flag4:IsA("Tool") then return end
+						if not flag4 or not flag4:IsA("Tool") or not humanoid then return end
 						local handle = flag4:FindFirstChild("Handle")
 						local cFrame = handle and handle.CFrame or character:FindFirstChild("HumanoidRootPart").CFrame
 						humanoid:UnequipTools()
@@ -436,7 +464,7 @@ local function attachFakeFruitActions(arg, arg2, arg3)
 					task.spawn(function()
 						local success = pcall(function()
 							local toolToStore = getPrimeTool(str3) or arg
-							commF:InvokeServer("StoreFruit", str3, toolToStore)
+							if commF then commF:InvokeServer("StoreFruit", str3, toolToStore) end
 						end)
 						if success then arg6:addText("[Blox Fruit stored.]") else arg6:addText("[Failed to store fruit.]") end
 						arg6:advanceAfterDelay(1.5)
@@ -537,7 +565,8 @@ local function executeGachaRoll(arg, arg2)
 end
 
 local function hasEnoughBeli(arg)
-	return LocalPlayer.Data.Beli.Value >= arg
+	local ok, val = pcall(function() return LocalPlayer.Data.Beli.Value end)
+	return ok and (val >= arg) or false
 end
 
 local currentPrice = 0
@@ -620,7 +649,10 @@ local function attachPurchaseOverlay(parent)
 	textButton.Activated:Connect(function()
 		if clicked then return end
 		if not gachaFlags.bypassCash and not hasEnoughBeli(currentPrice) then
-			setButtonOverrideText(("Need $%s more"):format(TextUtil.commaValue(currentPrice - LocalPlayer.Data.Beli.Value)))
+			local diff = 0
+			pcall(function() diff = currentPrice - LocalPlayer.Data.Beli.Value end)
+			local formatted = (TextUtil and TextUtil.commaValue) and TextUtil.commaValue(diff) or tostring(diff)
+			setButtonOverrideText(("Need $%s more"):format(formatted))
 			task.delay(2, function() if textButton.Parent then setButtonOverrideText(gachaFlags.bypassCash and "FREE" or nil) end end)
 			return
 		end
@@ -628,9 +660,9 @@ local function attachPurchaseOverlay(parent)
 		task.delay(0.5, function()
 			gachaHookActive = false
 			textButton:Destroy()
-			pcall(function() GachaWindow:Close() end)
+			pcall(function() if GachaWindow then GachaWindow:Close() end end)
 			task.delay(0.5, function()
-				local ok3, result3 = pcall(function() return GachaWindow:IsOpen() end)
+				local ok3, result3 = pcall(function() return GachaWindow and GachaWindow:IsOpen() end)
 				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow and ziolesGachaWindow.Enabled and (not ok3 or result3) then ziolesGachaWindow.Enabled = false end
 			end)
@@ -659,45 +691,47 @@ playerGui.DescendantAdded:Connect(function(descendant)
 	if gachaHookActive then processZiolesDescendant(descendant) end
 end)
 
-GachaWindow.Open = function(arg, arg2, arg3, ...)
-	if arg2 == "ZiolesGacha" then
-		resetGachaHooks()
-		gachaHookActive = false
-		if not nextSelectedFruit then
-			nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
-		end
-		if gachaFlags.boostLuck or gachaFlags.bypassCash or gachaFlags.bypassTime then
-			currentPrice = type(arg3) == "table" and tonumber(arg3.Value) or 0
-			gachaHookActive = true
-			overrideText = gachaFlags.bypassCash and "FREE" or nil
-			local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
-			if ziolesGachaWindow then
-				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do
-					if descendant.Name == "FakeOverlay" then descendant:Destroy() end
-				end
-				for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
+if GachaWindow and origGachaOpen then
+	GachaWindow.Open = function(arg, arg2, arg3, ...)
+		if arg2 == "ZiolesGacha" then
+			resetGachaHooks()
+			gachaHookActive = false
+			if not nextSelectedFruit then
+				nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
 			end
-		end
-	end
-
-	if arg2 == "ZiolesGacha" and gachaHookActive then
-		for _, v5 in ipairs({ 0, 0.05, 0.15, 0.3, 0.6 }) do
-			task.delay(v5, function()
-				if not gachaHookActive then return end
+			if gachaFlags.boostLuck or gachaFlags.bypassCash or gachaFlags.bypassTime then
+				currentPrice = type(arg3) == "table" and tonumber(arg3.Value) or 0
+				gachaHookActive = true
+				overrideText = gachaFlags.bypassCash and "FREE" or nil
 				local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
 				if ziolesGachaWindow then
+					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do
+						if descendant.Name == "FakeOverlay" then descendant:Destroy() end
+					end
 					for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
 				end
-			end)
+			end
 		end
-	end
 
-	local v5 = table.pack(...)
-	local v6 = origGachaOpen
-	v5.n = 4 + v5.n - 1
-	table.move(v5, 1, v5.n, 4, v5)
-	v5[1] = arg; v5[2] = arg2; v5[3] = arg3
-	return v6(table.unpack(v5, 1, v5.n))
+		if arg2 == "ZiolesGacha" and gachaHookActive then
+			for _, v5 in ipairs({ 0, 0.05, 0.15, 0.3, 0.6 }) do
+				task.delay(v5, function()
+					if not gachaHookActive then return end
+					local ziolesGachaWindow = playerGui:FindFirstChild("ZiolesGacha_Window")
+					if ziolesGachaWindow then
+						for _, descendant in ipairs(ziolesGachaWindow:GetDescendants()) do processZiolesDescendant(descendant) end
+					end
+				end)
+			end
+		end
+
+		local v5 = table.pack(...)
+		local v6 = origGachaOpen
+		v5.n = 4 + v5.n - 1
+		table.move(v5, 1, v5.n, 4, v5)
+		v5[1] = arg; v5[2] = arg2; v5[3] = arg3
+		return v6(table.unpack(v5, 1, v5.n))
+	end
 end
 
 ------------------------------------------------------------------------
@@ -815,7 +849,7 @@ local function paintFruit(f, rarity)
 end
 
 ------------------------------------------------------------------------
--- SCREEN GUI (PLACED DIRECTLY IN PLAYERGUID LIKE WORKING SCRIPT)
+-- SCREEN GUI
 ------------------------------------------------------------------------
 local oldGui = playerGui:FindFirstChild("FruitSpinPredictor")
 if oldGui then oldGui:Destroy() end
@@ -826,9 +860,23 @@ local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false
 local W, H, HEADER = 276, 404, 42
 local CARD_W, CARD_H = W - 20, 174
 
-local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 24),
+-- زر عائم للموبايل لفتح وإغلاق القائمة بسهولة
+local MobileBtn = new("TextButton", {
+	Name = "MobileToggle",
+	Position = UDim2.new(0, 12, 0.5, -20),
+	Size = UDim2.fromOffset(40, 40),
+	BackgroundColor3 = C.panel,
+	AutoButtonColor = false,
+	Text = "",
+	ZIndex = 50,
+	Parent = gui,
+}, { circle() })
+stroke(C.cyan, 1.5, 0).Parent = MobileBtn
+local mobFruit = makeFruit(MobileBtn, 22, 51)
+mobFruit.grad.Color = ColorSequence.new(C.cyan, C.purple)
+
+local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0),
 	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ClipsDescendants = false, Parent = gui })
-local rootScale = new("UIScale", { Scale = 1, Parent = Holder })
 local Pop = frame({ Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Holder })
 local mainScale = new("UIScale", { Scale = 1, Parent = Pop })
 
@@ -1498,11 +1546,15 @@ bind(BypassMoneyBtn.Activated, function() toggleGachaFlag("bypassCash") end)
 
 bind(DiscordBtn.Activated, function()
 	local copied = false
-	if typeof(setclipboard) == "function" then
-		copied = pcall(setclipboard, CONFIG.DiscordInvite)
-	elseif typeof(toclipboard) == "function" then
-		copied = pcall(toclipboard, CONFIG.DiscordInvite)
-	end
+	pcall(function()
+		if typeof(setclipboard) == "function" then
+			setclipboard(CONFIG.DiscordInvite)
+			copied = true
+		elseif typeof(toclipboard) == "function" then
+			toclipboard(CONFIG.DiscordInvite)
+			copied = true
+		end
+	end)
 	DiscordBtn.Text = copied and "Copied Link!" or "discord.gg/V7DYYebjHD"
 	tween(DiscordBtn, 0.2, { BackgroundColor3 = C.green })
 	task.delay(2, function()
@@ -1549,15 +1601,23 @@ end)
 local function destroy()
 	if not alive then return end
 	alive = false
-	for _, c in ipairs(conns) do c:Disconnect() end
-	if ENV.__FruitSpinPredictorDestroy == destroy then ENV.__FruitSpinPredictorDestroy = nil end
-	gui:Destroy()
+	for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+	if type(ENV) == "table" and ENV.__FruitSpinPredictorDestroy == destroy then
+		ENV.__FruitSpinPredictorDestroy = nil
+	end
+	pcall(function() gui:Destroy() end)
 end
-ENV.__FruitSpinPredictorDestroy = destroy
+if type(ENV) == "table" then
+	ENV.__FruitSpinPredictorDestroy = destroy
+end
 
 bind(CloseBtn.Activated, function()
 	tween(mainScale, 0.25, { Scale = 0.9 })
 	task.delay(0.27, destroy)
+end)
+
+bind(MobileBtn.Activated, function()
+	Holder.Visible = not Holder.Visible
 end)
 
 bind(UIS.InputBegan, function(input, gp)
@@ -1584,6 +1644,7 @@ end)
 -- BACKGROUND PRELOAD OF MYTHICAL FRUIT MODELS FROM INVENTORY
 ------------------------------------------------------------------------
 task.spawn(function()
+	if not commF then return end
 	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local inv = getInventory()
 	local mythItems = {}
