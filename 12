@@ -1,14 +1,27 @@
+--[[
+    Fruit Spin Predictor  •  Blox Fruits UI  (v2 – Blox Fruits style)
+    Discord: https://discord.gg/V7DYYebjHD
+    RightControl hides / shows the window.
+]]
+
+------------------------------------------------------------------------
+-- CONFIG
+------------------------------------------------------------------------
 local CONFIG = {
 	PredictionURL      = "",
 	DiscordInvite      = "https://discord.gg/V7DYYebjHD",
 	AutoRefreshSeconds = 30,
-	ScanDuration       = 0.8,
+	ScanDuration       = 1.0,
 	SpinAnimation      = true,
 	RequestTimeout     = 10,
 	BrandName          = "FRUIT SPIN",
 	BrandTag           = "PREDICTOR",
-	Version            = "v2.6",
+	Version            = "v2.0",
 	ToggleKey          = Enum.KeyCode.RightControl,
+}
+
+local FRUIT_ICONS = {
+	-- Kitsune = "rbxassetid://000000",
 }
 
 local FRUITS = {
@@ -279,38 +292,17 @@ local function registerFruit(arg, arg2)
 end
 
 local allFruitsList = {
-	registerFruit("Spin", 0),
-	registerFruit("Smoke", 0),
-	registerFruit("Blade", 0),
-	registerFruit("Bomb", 0),
-	registerFruit("Spike", 0),
-	registerFruit("Rocket", 0),
-	registerFruit("Sand", 1),
-	registerFruit("Ice", 1),
-	registerFruit("Flame", 1),
-	registerFruit("Dark", 1),
-	registerFruit("Eagle", 1),
-	registerFruit("Light", 2),
-	registerFruit("Rubber", 2),
-	registerFruit("Magma", 2),
-	registerFruit("Buddha", 3),
-	registerFruit("Portal", 3),
-	registerFruit("Lightning", 3),
-	registerFruit("Pain", 3),
-	registerFruit("Shadow", 4),
-	registerFruit("Control", 4),
-	registerFruit("Tiger", 4),
-	registerFruit("Gravity", 4),
-	registerFruit("Dragon (East)", 4),
-	registerFruit("Gas", 4),
-	registerFruit("Kitsune", 4),
-	registerFruit("Dough", 4),
-	registerFruit("Yeti", 4),
-	registerFruit("Dragon (West)", 4),
-	registerFruit("T-Rex", 4),
-	registerFruit("Mammoth", 4),
-	registerFruit("Spirit", 4),
-	registerFruit("Venom", 4),
+	registerFruit("Spin", 0), registerFruit("Smoke", 0), registerFruit("Blade", 0),
+	registerFruit("Bomb", 0), registerFruit("Spike", 0), registerFruit("Rocket", 0),
+	registerFruit("Sand", 1), registerFruit("Ice", 1), registerFruit("Flame", 1),
+	registerFruit("Dark", 1), registerFruit("Eagle", 1), registerFruit("Light", 2),
+	registerFruit("Rubber", 2), registerFruit("Magma", 2), registerFruit("Buddha", 3),
+	registerFruit("Portal", 3), registerFruit("Lightning", 3), registerFruit("Pain", 3),
+	registerFruit("Shadow", 4), registerFruit("Control", 4), registerFruit("Tiger", 4),
+	registerFruit("Gravity", 4), registerFruit("Dragon (East)", 4), registerFruit("Gas", 4),
+	registerFruit("Kitsune", 4), registerFruit("Dough", 4), registerFruit("Yeti", 4),
+	registerFruit("Dragon (West)", 4), registerFruit("T-Rex", 4), registerFruit("Mammoth", 4),
+	registerFruit("Spirit", 4), registerFruit("Venom", 4),
 }
 
 pcall(function()
@@ -776,27 +768,25 @@ if origGachaOpen then
 end
 
 ------------------------------------------------------------------------
--- THEME & SAFE FONT / INSTANCE HELPERS (OLD UI STYLE, COMPATIBLE)
+-- THEME
 ------------------------------------------------------------------------
 local C = {
-	bg0     = Color3.fromRGB(8, 10, 18),
-	bg1     = Color3.fromRGB(18, 22, 38),
-	sea     = Color3.fromRGB(10, 36, 70),
-	panel   = Color3.fromRGB(26, 31, 50),
-	line    = Color3.fromRGB(60, 70, 104),
-	text    = Color3.fromRGB(244, 247, 255),
-	sub     = Color3.fromRGB(150, 162, 195),
-	cyan    = Color3.fromRGB(0, 229, 255),
-	blue    = Color3.fromRGB(41, 121, 255),
-	purple  = Color3.fromRGB(168, 82, 255),
-	discord = Color3.fromRGB(88, 101, 242),
-	red     = Color3.fromRGB(255, 70, 90),
-	gold    = Color3.fromRGB(255, 205, 70),
-	green   = Color3.fromRGB(50, 210, 100),
-	gray    = Color3.fromRGB(140, 148, 170),
-	off     = Color3.fromRGB(50, 56, 80),
-	ink     = Color3.fromRGB(6, 8, 16),
-	white   = Color3.new(1, 1, 1),
+	bg0    = Color3.fromRGB(8, 10, 18),
+	bg1    = Color3.fromRGB(18, 22, 38),
+	sea    = Color3.fromRGB(10, 36, 70),
+	panel  = Color3.fromRGB(26, 31, 50),
+	line   = Color3.fromRGB(60, 70, 104),
+	text   = Color3.fromRGB(244, 247, 255),
+	sub    = Color3.fromRGB(150, 162, 195),
+	cyan   = Color3.fromRGB(0, 229, 255),
+	blue   = Color3.fromRGB(41, 121, 255),
+	purple = Color3.fromRGB(168, 82, 255),
+	red    = Color3.fromRGB(255, 70, 90),
+	gold   = Color3.fromRGB(255, 205, 70),
+	gray   = Color3.fromRGB(140, 148, 170),
+	off    = Color3.fromRGB(50, 56, 80),
+	ink    = Color3.fromRGB(6, 8, 16),
+	white  = Color3.new(1, 1, 1),
 }
 
 local RARITY = {
@@ -817,6 +807,9 @@ local F_TITLE = safeFont("FredokaOne", Enum.Font.GothamBlack)
 local F_BOLD  = safeFont("GothamBold", Enum.Font.SourceSansBold)
 local F_REG   = safeFont("GothamMedium", Enum.Font.SourceSans)
 
+------------------------------------------------------------------------
+-- HELPERS
+------------------------------------------------------------------------
 local alive, conns = true, {}
 local function bind(signal, fn)
 	if not signal then return nil end
@@ -907,18 +900,34 @@ local function paintFruit(f, rarity)
 end
 
 ------------------------------------------------------------------------
--- SCREEN GUI (SAFE PARENTING + OLD UI DESIGN)
+-- SCREEN GUI (SAFE MULTI-EXECUTOR PARENTING)
 ------------------------------------------------------------------------
-local function mountGui(sg)
-	local mounted = false
+local function mountGui(targetGui)
+	local candidates = {}
 	if typeof(gethui) == "function" then
-		mounted = pcall(function() sg.Parent = gethui() end)
+		local ok, h = pcall(gethui)
+		if ok and typeof(h) == "Instance" then table.insert(candidates, h) end
 	end
-	if not mounted then
-		mounted = pcall(function() sg.Parent = game:GetService("CoreGui") end)
-	end
-	if not mounted and playerGui then
-		sg.Parent = playerGui
+	pcall(function()
+		local cg = game:GetService("CoreGui")
+		if cg then table.insert(candidates, cg) end
+	end)
+	if playerGui then table.insert(candidates, playerGui) end
+
+	for _, p in ipairs(candidates) do
+		local ok = pcall(function()
+			targetGui.Parent = p
+		end)
+		if ok and targetGui.Parent == p then
+			local probeOk = pcall(function()
+				local probe = Instance.new("Frame")
+				probe.Size = UDim2.fromOffset(1, 1)
+				probe.BackgroundTransparency = 1
+				probe.Parent = targetGui
+				probe:Destroy()
+			end)
+			if probeOk then return end
+		end
 	end
 end
 
@@ -926,17 +935,19 @@ local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999 })
 mountGui(gui)
 
-local W, H, HEADER = 276, 404, 42
+local W, H, HEADER = 260, 354, 42
 local CARD_W, CARD_H = W - 20, 174
 
 local Holder = frame({ Name = "Holder", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 24),
-	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ClipsDescendants = false, Parent = gui })
+	Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, Parent = gui })
 local rootScale = new("UIScale", { Scale = 1, Parent = Holder })
 local Pop = frame({ Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Holder })
 local mainScale = new("UIScale", { Scale = 0.9, Parent = Pop })
 
-local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1),
-	BackgroundColor3 = C.blue, BackgroundTransparency = 0.88, ZIndex = 1, Parent = Pop }, { corner(14) })
+frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 6), Size = UDim2.new(1, 18, 1, 18),
+	BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.65, ZIndex = 1, Parent = Pop }, { corner(22) })
+local Haze = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 8, 1, 8),
+	BackgroundColor3 = C.blue, BackgroundTransparency = 0.8, ZIndex = 1, Parent = Pop }, { corner(18) })
 
 local Main = frame({ Name = "Main", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.white, ClipsDescendants = true,
 	ZIndex = 2, Parent = Pop }, { corner(14), grad({ C.bg1, C.bg0, C.sea }, 100) })
@@ -946,9 +957,7 @@ local borderGrad = grad({ C.cyan, C.blue, C.purple, C.blue, C.cyan }, 0); border
 ------------------------------------------------------------------------
 -- HEADER
 ------------------------------------------------------------------------
-local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Main },
-	{ corner(14), grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
-frame({ Position = UDim2.new(0, 0, 1, -12), Size = UDim2.new(1, 0, 0, 12), BackgroundColor3 = C.white, BorderSizePixel = 0, ZIndex = 4, Parent = Header },
+local Header = frame({ Name = "Header", Size = UDim2.new(1, 0, 0, HEADER), BackgroundColor3 = C.white, ZIndex = 4, Parent = Main },
 	{ grad({ Color3.fromRGB(26, 34, 66), Color3.fromRGB(20, 18, 44) }, 0) })
 
 local headIcon = frame({ Position = UDim2.fromOffset(9, 7), Size = UDim2.fromOffset(28, 28), BackgroundColor3 = C.panel,
@@ -983,7 +992,7 @@ frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2),
 -- BODY
 ------------------------------------------------------------------------
 local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
-	BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = Main })
+	BackgroundTransparency = 1, ZIndex = 3, Parent = Main })
 
 local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
 	ZIndex = 4, Parent = Body }, { corner(10) })
@@ -1000,65 +1009,7 @@ local Knob = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 
 	BackgroundColor3 = Color3.fromRGB(185, 192, 212), ZIndex = 6, Parent = Switch }, { circle() })
 local ToggleHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 7, Parent = ToggleRow })
 
-local QuickBar = frame({ Name = "QuickBar", Position = UDim2.fromOffset(10, 50), Size = UDim2.new(1, -20, 0, 34),
-	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
-new("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	HorizontalAlignment = Enum.HorizontalAlignment.Center,
-	VerticalAlignment = Enum.VerticalAlignment.Center,
-	Padding = UDim.new(0, 6),
-	Parent = QuickBar,
-})
-
-local quickButtonRefs = {}
-local function makeQuickBtn(key, titleText, activeCol)
-	local btn = new("TextButton", {
-		Size = UDim2.new(0.333, -4, 1, 0),
-		BackgroundColor3 = C.panel,
-		AutoButtonColor = false,
-		Text = "",
-		ZIndex = 5,
-		Parent = QuickBar,
-	}, { corner(8) })
-	local st = stroke(C.line, 1.2, 0); st.Parent = btn
-
-	local dot = frame({
-		Position = UDim2.fromOffset(7, 13),
-		Size = UDim2.fromOffset(7, 7),
-		BackgroundColor3 = C.gray,
-		ZIndex = 6,
-		Parent = btn,
-	}, { circle() })
-
-	local lbl = label({
-		Position = UDim2.fromOffset(18, 0),
-		Size = UDim2.new(1, -22, 1, 0),
-		Text = titleText,
-		Font = F_BOLD,
-		TextSize = 9,
-		TextColor3 = C.sub,
-		TextWrapped = true,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 6,
-		Parent = btn,
-	})
-
-	local function refreshVisual(isOn)
-		tween(btn, 0.2, { BackgroundColor3 = isOn and activeCol:Lerp(C.bg0, 0.72) or C.panel })
-		tween(st, 0.2, { Color = isOn and activeCol or C.line })
-		tween(dot, 0.2, { BackgroundColor3 = isOn and activeCol or C.gray })
-		tween(lbl, 0.2, { TextColor3 = isOn and C.white or C.sub })
-	end
-
-	quickButtonRefs[key] = refreshVisual
-	return btn, refreshVisual
-end
-
-local BoostLuckBtn = makeQuickBtn("boostLuck", "Boost\nLuck", C.green)
-local BypassTimeBtn = makeQuickBtn("bypassTime", "Bypass\nTime", C.cyan)
-local BypassMoneyBtn = makeQuickBtn("bypassCash", "Bypass\nMoney", C.gold)
-
-local StatusChip = frame({ Position = UDim2.fromOffset(10, 92), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X,
+local StatusChip = frame({ Position = UDim2.fromOffset(10, 52), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X,
 	BackgroundColor3 = C.gray, BackgroundTransparency = 0.82, ZIndex = 4, Parent = Body }, {
 	circle(), new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 10) }),
 	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6) }),
@@ -1067,10 +1018,10 @@ local statusStroke = stroke(C.gray, 1, 0.4); statusStroke.Parent = StatusChip
 local StatusDot = frame({ Size = UDim2.fromOffset(7, 7), BackgroundColor3 = C.gray, ZIndex = 5, LayoutOrder = 1, Parent = StatusChip }, { circle() })
 local StatusText = label({ Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X, Text = "Waiting",
 	Font = F_BOLD, TextSize = 10, TextColor3 = C.gray, ZIndex = 5, LayoutOrder = 2, Parent = StatusChip })
-local UpdatedLbl = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 92), Size = UDim2.fromOffset(130, 20),
+local UpdatedLbl = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 52), Size = UDim2.fromOffset(120, 20),
 	Text = "No data yet", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
 
-local Card = frame({ Name = "Card", Position = UDim2.fromOffset(10, 120), Size = UDim2.new(1, -20, 0, CARD_H),
+local Card = frame({ Name = "Card", Position = UDim2.fromOffset(10, 80), Size = UDim2.new(1, -20, 0, CARD_H),
 	BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Body },
 	{ corner(12), grad({ Color3.fromRGB(28, 36, 62), Color3.fromRGB(12, 16, 30), C.sea }, 90) })
 local cardStroke = stroke(C.line, 1.6, 0); cardStroke.Parent = Card
@@ -1104,7 +1055,7 @@ local EmptyGlyph = label({ Size = UDim2.fromScale(1, 1), Text = "?", Font = F_TI
 local EmptyTitle = label({ Position = UDim2.fromOffset(0, 86), Size = UDim2.new(1, 0, 0, 18), Text = "No Fruit Detected",
 	Font = F_TITLE, TextSize = 15, ZIndex = 6, Parent = EmptyView }, { textStroke(C.ink, 1.5) })
 local EmptySub = label({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 107), Size = UDim2.new(1, -30, 0, 36),
-	Text = "Turn on the predictor to see the next shop fruit.", TextSize = 10, TextColor3 = C.sub, TextWrapped = true,
+	Text = "Turn on the predictor to scan.", TextSize = 10, TextColor3 = C.sub, TextWrapped = true,
 	TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 6, Parent = EmptyView })
 
 local Radar = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 62), Size = UDim2.fromOffset(84, 84),
@@ -1116,7 +1067,7 @@ frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5
 local RadarSweep = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(80, 3),
 	BackgroundColor3 = C.cyan, ZIndex = 7, Parent = Radar }, { new("UIGradient", { Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 0) }) }) })
-label({ Position = UDim2.fromOffset(0, 112), Size = UDim2.new(1, 0, 0, 16), Text = "Scanning Dealer...",
+label({ Position = UDim2.fromOffset(0, 112), Size = UDim2.new(1, 0, 0, 16), Text = "Scanning...",
 	Font = F_TITLE, TextSize = 14, TextColor3 = C.cyan, ZIndex = 6, Parent = ScanView }, { textStroke(C.ink, 1.5) })
 local ProgTrack = frame({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 134), Size = UDim2.fromOffset(150, 6),
 	BackgroundColor3 = C.ink, ZIndex = 6, Parent = ScanView }, { circle(), stroke(C.line, 1, 0) })
@@ -1129,25 +1080,20 @@ frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), Backgrou
 
 label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
 	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
-local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 84), Size = UDim2.fromOffset(204, 74),
-	BackgroundColor3 = C.ink, ClipsDescendants = true, ZIndex = 6, Parent = ReelView }, { corner(12) })
+local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 82), Size = UDim2.fromOffset(196, 74),
+	BackgroundColor3 = C.ink, ZIndex = 6, Parent = ReelView }, { corner(12) })
 local slotStroke = stroke(C.gold, 2, 0); slotStroke.Parent = Slot
 local slotScale = new("UIScale", { Scale = 1, Parent = Slot })
 for _, side in ipairs({ -1, 1 }) do
-	label({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5 + side * 0.44, 0, 0.5, 0), Size = UDim2.fromOffset(14, 20),
-		Text = side < 0 and ">" or "<", Font = F_TITLE, TextSize = 18, TextColor3 = C.gold, ZIndex = 9, Parent = Slot }, { textStroke(C.ink, 1.5) })
+	label({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5 + side * 0.58, 0, 0.5, 0), Size = UDim2.fromOffset(14, 20),
+		Text = side < 0 and ">" or "<", Font = F_TITLE, TextSize = 20, TextColor3 = C.gold, ZIndex = 7, Parent = Slot }, { textStroke(C.ink, 1.5) })
 end
-local ReelIconBox = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 22, 0.5, 0), Size = UDim2.fromOffset(48, 48),
-	BackgroundColor3 = C.panel, ZIndex = 7, Parent = Slot }, { corner(10) })
-local reelIconStroke = stroke(C.line, 1.5, 0.2); reelIconStroke.Parent = ReelIconBox
-local ReelImage = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.86, 0.86),
-	BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, Image = "", Visible = false, ZIndex = 8, Parent = ReelIconBox })
-local reelFruitFallback = makeFruit(ReelIconBox, 36, 8, UDim2.new(0.5, 0, 0.5, 2))
-local ReelName = label({ Position = UDim2.fromOffset(78, 0), Size = UDim2.new(1, -98, 1, 0), Text = "", Font = F_TITLE,
-	TextSize = 18, TextTruncate = Enum.TextTruncate.AtEnd, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
+local reelFruit = makeFruit(Slot, 40, 8, UDim2.new(0, 36, 0.5, 2))
+local ReelName = label({ Position = UDim2.fromOffset(66, 0), Size = UDim2.new(1, -72, 1, 0), Text = "", Font = F_TITLE,
+	TextSize = 20, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
 
 local ICON_X, ICON_Y = CARD_W / 2, 62
-label({ Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 12), Text = "NEXT SHOP FRUIT", Font = F_BOLD,
+label({ Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 12), Text = "PREDICTED FRUIT", Font = F_BOLD,
 	TextSize = 9, TextColor3 = C.sub, ZIndex = 6, Parent = ResultView })
 
 local rays = {}
@@ -1168,7 +1114,7 @@ local IconHolder = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2
 	BackgroundColor3 = C.ink, ZIndex = 7, Parent = ResultView }, { circle() })
 local iconStroke = stroke(C.cyan, 2.5, 0); iconStroke.Parent = IconHolder
 local iconScale = new("UIScale", { Scale = 1, Parent = IconHolder })
-local IconImage = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.84, 0.84),
+local IconImage = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.9, 0.9),
 	BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, Image = "", Visible = false, ZIndex = 8, Parent = IconHolder })
 local bigFruit = makeFruit(IconHolder, 50, 8)
 
@@ -1186,49 +1132,51 @@ local DetailLbl = label({ Position = UDim2.fromOffset(0, 153), Size = UDim2.new(
 local Shine = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(-0.3, 0, 0.5, 0), Size = UDim2.new(0, 34, 1.6, 0),
 	Rotation = 18, BackgroundColor3 = C.white, ZIndex = 13, Parent = Card }, { new("UIGradient", { Transparency = fadeEdges(0.78) }) })
 
-local BtnBase = frame({ Position = UDim2.fromOffset(10, 302), Size = UDim2.new(1, -20, 0, 32), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
+local BtnBase = frame({ Position = UDim2.fromOffset(10, 262), Size = UDim2.new(1, -20, 0, 34), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
 	ZIndex = 4, Parent = Body }, { corner(10) })
-local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -2), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
+local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -3), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
 	BackgroundColor3 = C.off, Text = "", ZIndex = 5, Parent = BtnBase }, { corner(10) })
 local refreshGrad = grad({ C.cyan, C.blue, C.purple }, 0); refreshGrad.Enabled = false; refreshGrad.Parent = RefreshBtn
 local refreshStroke = stroke(C.ink, 1.5, 0); refreshStroke.Parent = RefreshBtn
-frame({ Position = UDim2.fromOffset(6, 3), Size = UDim2.new(1, -12, 0, 7), BackgroundColor3 = C.white, BackgroundTransparency = 0.82,
+frame({ Position = UDim2.fromOffset(6, 3), Size = UDim2.new(1, -12, 0, 8), BackgroundColor3 = C.white, BackgroundTransparency = 0.82,
 	ZIndex = 6, Parent = RefreshBtn }, { corner(4) })
-local RefreshLbl = label({ Size = UDim2.fromScale(1, 1), Text = "Refresh Fruit", Font = F_TITLE, TextSize = 14,
+local RefreshLbl = label({ Size = UDim2.fromScale(1, 1), Text = "Refresh Prediction", Font = F_TITLE, TextSize = 15,
 	TextColor3 = C.sub, ZIndex = 7, Parent = RefreshBtn }, { textStroke(C.ink, 1.5) })
 local Spinner = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0.5, -52, 0.5, 0), Size = UDim2.fromOffset(13, 13),
 	BackgroundTransparency = 1, Visible = false, ZIndex = 7, Parent = RefreshBtn }, { circle() })
 local spinStroke = stroke(C.white, 2.2, 0); spinStroke.Parent = Spinner
 new("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = spinStroke })
 
-local FooterRow = frame({ Name = "FooterRow", Position = UDim2.fromOffset(10, 338), Size = UDim2.new(1, -20, 0, 20),
-	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
+local FooterBrand = label({ Position = UDim2.fromOffset(10, 296), Size = UDim2.new(0.6, 0, 0, 14), Text = "• " .. CONFIG.BrandName .. " " .. CONFIG.BrandTag,
+	Font = F_TITLE, TextSize = 11, TextColor3 = C.white, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4, Parent = Body })
+local footerGrad = grad({ C.cyan, C.purple, C.blue, C.cyan }, 0); footerGrad.Parent = FooterBrand
+label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 296), Size = UDim2.new(0.4, 0, 0, 14),
+	Text = CONFIG.ToggleKey.Name .. " = hide", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
 
-local DiscordBtn = new("TextButton", {
-	Position = UDim2.fromOffset(0, 1),
-	Size = UDim2.fromOffset(118, 18),
-	BackgroundColor3 = C.discord,
-	AutoButtonColor = false,
-	Text = "Discord Server",
-	Font = F_BOLD,
-	TextSize = 9,
-	TextColor3 = C.white,
-	ZIndex = 5,
-	Parent = FooterRow,
-}, { corner(6), textStroke(C.ink, 1) })
-stroke(C.white, 1, 0.7).Parent = DiscordBtn
-
-local HideHintLbl = label({
-	AnchorPoint = Vector2.new(1, 0.5),
-	Position = UDim2.new(1, 0, 0.5, 0),
-	Size = UDim2.new(0.45, 0, 1, 0),
-	Text = CONFIG.ToggleKey.Name .. " = hide",
-	TextSize = 9,
-	TextColor3 = C.sub,
-	TextXAlignment = Enum.TextXAlignment.Right,
-	ZIndex = 4,
-	Parent = FooterRow,
-})
+------------------------------------------------------------------------
+-- WHOLE-WINDOW FADE
+------------------------------------------------------------------------
+local function snapshot(root)
+	local list = {}
+	for _, o in ipairs(root:GetDescendants()) do
+		if o:IsA("GuiObject") then
+			local e = { o = o, p = { BackgroundTransparency = o.BackgroundTransparency } }
+			if o:IsA("TextLabel") or o:IsA("TextButton") then e.p.TextTransparency = o.TextTransparency end
+			if o:IsA("ImageLabel") then e.p.ImageTransparency = o.ImageTransparency end
+			table.insert(list, e)
+		elseif o:IsA("UIStroke") then
+			table.insert(list, { o = o, p = { Transparency = o.Transparency } })
+		end
+	end
+	return list
+end
+local function fadeAll(list, show, t)
+	for _, e in ipairs(list) do
+		local goal = {}
+		for k, v in pairs(e.p) do if show then e.o[k] = 1; goal[k] = v else goal[k] = 1 end end
+		tween(e.o, t, goal)
+	end
+end
 
 ------------------------------------------------------------------------
 -- STATE & EFFECTS
@@ -1265,7 +1213,7 @@ local function clearFX()
 	for _, r in ipairs(rays) do r.BackgroundTransparency = 1 end
 	tween(cardStroke, 0.3, { Color = C.line, Transparency = 0 })
 	tween(cardTint, 0.3, { BackgroundTransparency = 1 })
-	tween(Haze, 0.4, { BackgroundColor3 = C.blue, BackgroundTransparency = 0.88 })
+	tween(Haze, 0.4, { BackgroundColor3 = C.blue, BackgroundTransparency = 0.8 })
 end
 
 local function showEmpty(title, sub, kind)
@@ -1285,7 +1233,7 @@ local function setButtonEnabled(on)
 end
 local function setButtonLoading(on)
 	Spinner.Visible = on
-	RefreshLbl.Text = on and "    Scanning..." or "Refresh Fruit"
+	RefreshLbl.Text = on and "    Scanning..." or "Refresh Prediction"
 end
 
 local function fxCount() return #FX:GetChildren() end
@@ -1372,44 +1320,26 @@ end
 ------------------------------------------------------------------------
 -- REEL + REVEAL
 ------------------------------------------------------------------------
-local function applyReelFruitVisual(fruitName, rarityName, spriteData)
-	local col = rarityInfo(rarityName).color
-	reelIconStroke.Color = col
-	local spr = spriteData or getFruitSprite(fruitName)
-	if spr and spr.Image then
-		ReelImage.Image = spr.Image
-		ReelImage.ImageRectOffset = spr.ImageRectOffset or Vector2.new(0, 0)
-		ReelImage.ImageRectSize = spr.ImageRectSize or Vector2.new(0, 0)
-		ReelImage.Visible = true
-		reelFruitFallback.body.Visible = false
-	else
-		ReelImage.Visible = false
-		reelFruitFallback.body.Visible = true
-		paintFruit(reelFruitFallback, rarityName)
-	end
-end
-
 local function spinReel(final, my)
 	showView("Reel")
 	slotScale.Scale = 1
 	slotStroke.Color = C.gold
-	local steps, start = 16, math.random(#REEL_LIST)
+	local steps, start = 18, math.random(#REEL_LIST)
 	for i = 1, steps do
 		if not alive or my ~= state.token then return false end
-		local isLast = (i == steps)
-		local pick = isLast and final or REEL_LIST[(start + i) % #REEL_LIST + 1]
+		local pick = (i == steps) and final or REEL_LIST[(start + i) % #REEL_LIST + 1]
 		ReelName.Text = pick.name
 		ReelName.TextColor3 = rarityInfo(pick.rarity).color
-		applyReelFruitVisual(pick.name, pick.rarity, isLast and final.sprite or nil)
-		ReelName.Position = UDim2.fromOffset(78, -10)
-		tween(ReelName, 0.07, { Position = UDim2.fromOffset(78, 0) })
-		task.wait(0.025 + (i / steps) ^ 3 * 0.18)
+		paintFruit(reelFruit, pick.rarity)
+		ReelName.Position = UDim2.fromOffset(66, -10)
+		tween(ReelName, 0.07, { Position = UDim2.fromOffset(66, 0) })
+		task.wait(0.03 + (i / steps) ^ 3 * 0.22)
 	end
 	local col = rarityInfo(final.rarity).color
 	slotStroke.Color = col
-	slotScale.Scale = 1.1
+	slotScale.Scale = 1.12
 	tween(slotScale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
-	task.wait(0.35)
+	task.wait(0.45)
 	return alive and my == state.token
 end
 
@@ -1427,7 +1357,7 @@ local function reveal(data)
 	BadgeText.TextColor3 = C.white
 	Badge.BackgroundColor3 = col
 	badgeStroke.Color = special and C.gold or C.ink
-	DetailLbl.Text = string.format('Shop Drop: <b>%s</b>  |  Rarity: <font color="#%s"><b>%s</b></font>',
+	DetailLbl.Text = string.format('Predicted Fruit: <b>%s</b>  |  Rarity: <font color="#%s"><b>%s</b></font>',
 		data.name, col:ToHex(), data.rarity)
 	GlowRing.BackgroundColor3, ringStroke.Color, Halo.BackgroundColor3 = col, col, col
 	iconStroke.Color = special and C.gold or col
@@ -1436,23 +1366,15 @@ local function reveal(data)
 	cardTint.BackgroundColor3 = col
 	tween(cardTint, 0.5, { BackgroundTransparency = 0.9 })
 	tween(cardStroke, 0.4, { Color = special and C.gold or col })
-	tween(Haze, 0.5, { BackgroundColor3 = col, BackgroundTransparency = 0.78 })
+	tween(Haze, 0.5, { BackgroundColor3 = col, BackgroundTransparency = 0.72 })
 
-	if data.sprite and data.sprite.Image then
-		IconImage.Image = data.sprite.Image
-		IconImage.ImageRectOffset = data.sprite.ImageRectOffset or Vector2.new(0, 0)
-		IconImage.ImageRectSize = data.sprite.ImageRectSize or Vector2.new(0, 0)
-		IconImage.Visible = true
-		bigFruit.body.Visible = false
-	elseif data.icon then
-		IconImage.Image = data.icon
-		IconImage.ImageRectOffset = Vector2.new(0, 0)
-		IconImage.ImageRectSize = Vector2.new(0, 0)
-		IconImage.Visible = true
-		bigFruit.body.Visible = false
+	if data.icon then
+		IconImage.Image, IconImage.Visible, bigFruit.body.Visible = data.icon, true, false
+		task.delay(2.5, function()
+			if state.current == data and not IconImage.IsLoaded then IconImage.Visible, bigFruit.body.Visible = false, true end
+		end)
 	else
-		IconImage.Visible = false
-		bigFruit.body.Visible = true
+		IconImage.Visible, bigFruit.body.Visible = false, true
 	end
 
 	showView("Result")
@@ -1484,32 +1406,74 @@ local function reveal(data)
 end
 
 ------------------------------------------------------------------------
--- CONNECT SHOP FRUIT DATA TO PREDICTOR UI
+-- DATA SOURCE (real data + shop pool fallback)
 ------------------------------------------------------------------------
-local function buildFruitDataFromCandidate(cand)
-	local sprite = getFruitSprite(cand.DisplayName)
-	local rarityName = (cand.Rarity and cand.Rarity.Name) or "Common"
-	return {
-		name = cand.DisplayName,
-		rarity = rarityName,
-		icon = sprite and sprite.Image or cand.Image,
-		sprite = sprite,
-		source = "Dealer Gacha",
-	}
+local function normalize(d, sourceName)
+	local fruit = d.fruit or d.Fruit or d.name or d.Name
+	if type(fruit) ~= "string" or fruit:match("^%s*$") then return nil, "Prediction data has no fruit name." end
+	fruit = fruit:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s*[Ff]ruit$", "")
+	local known = FRUIT_LOOKUP[fruit:lower()]
+	local name = known and known.name or fruit
+	local rarity = tostring(d.rarity or d.Rarity or (known and known.rarity) or "Unknown")
+	rarity = rarity:sub(1, 1):upper() .. rarity:sub(2):lower()
+	local icon = d.icon or d.Icon or FRUIT_ICONS[name]
+	if type(icon) == "number" then icon = "rbxassetid://" .. icon end
+	if type(icon) ~= "string" or icon == "" then icon = nil end
+	return { name = name, rarity = rarity, icon = icon, source = sourceName }
 end
 
-local function fetchShopPrediction(forceNewPick)
-	if forceNewPick or not nextSelectedFruit then
+local function fetchPrediction()
+	local src = type(ENV) == "table" and ENV.FruitPrediction or nil
+	if type(src) == "function" then
+		local ok, res = pcall(src)
+		if not ok then return nil, "Prediction source error: " .. tostring(res):sub(1, 60) end
+		src = res
+	end
+	if type(src) == "string" and src ~= "" then src = { fruit = src } end
+	if type(src) == "table" then return normalize(src, "Custom source") end
+	if CONFIG.PredictionURL ~= "" then
+		local ok, body = pcall(function() return game:HttpGet(CONFIG.PredictionURL) end)
+		if not ok or type(body) ~= "string" then return nil, "Couldn't reach the prediction server." end
+		local ok2, data = pcall(function() return HttpService:JSONDecode(body) end)
+		if not ok2 or type(data) ~= "table" then return nil, "The server sent data the UI can't read." end
+		return normalize(data, "Prediction server")
+	end
+
+	if not nextSelectedFruit then
 		nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
 	end
 	if nextSelectedFruit then
-		return buildFruitDataFromCandidate(nextSelectedFruit), nil
+		local spr = getFruitSprite(nextSelectedFruit.DisplayName)
+		local rName = (nextSelectedFruit.Rarity and nextSelectedFruit.Rarity.Name) or "Common"
+		return {
+			name = nextSelectedFruit.DisplayName,
+			rarity = rName,
+			icon = spr and spr.Image or FRUIT_ICONS[nextSelectedFruit.DisplayName],
+			source = "Dealer Gacha",
+		}, nil
 	end
-	return nil, "Couldn't read shop pool."
+
+	return nil, "NO_SOURCE"
 end
 
-local function runPrediction(forceNewPick)
+local function fetchWithTimeout(timeout)
+	local done, res, err = false, nil, nil
+	task.spawn(function()
+		local ok, r, e = pcall(fetchPrediction)
+		if ok then res, err = r, e else err = "Something went wrong reading the prediction." end
+		done = true
+	end)
+	local t0 = os.clock()
+	while not done and os.clock() - t0 < timeout do task.wait(0.05) end
+	if not done then return nil, "The prediction source took too long." end
+	return res, err
+end
+
+local function runPrediction(forceNew)
 	if not state.enabled or state.busy then return end
+	if forceNew then
+		nextSelectedFruit = pickCandidateFruit(gachaFlags.boostLuck)
+	end
 	state.busy = true
 	state.token += 1
 	local my = state.token
@@ -1522,12 +1486,12 @@ local function runPrediction(forceNewPick)
 	tween(ProgFill, CONFIG.ScanDuration, { Size = UDim2.fromScale(0.9, 1) }, Enum.EasingStyle.Sine)
 
 	local t0 = os.clock()
-	local res, err = fetchShopPrediction(forceNewPick)
+	local res, err = fetchWithTimeout(CONFIG.RequestTimeout)
 	local left = CONFIG.ScanDuration - (os.clock() - t0)
 	if left > 0 then task.wait(left) end
 	if not alive or my ~= state.token then return end
 	tween(ProgFill, 0.15, { Size = UDim2.fromScale(1, 1) })
-	task.wait(0.15)
+	task.wait(0.18)
 	if not alive or my ~= state.token then return end
 
 	if res then
@@ -1540,21 +1504,32 @@ local function runPrediction(forceNewPick)
 	state.busy = false
 	setButtonLoading(false)
 	state.current = nil
-	showEmpty("Prediction Unavailable", err or "Error", "error")
-	setStatus("Error"); stamp("Last try failed")
+	if err == "NO_SOURCE" then
+		showEmpty("No Prediction Source", "Connect a prediction source. No fruit is shown until real data arrives.", "source")
+		setStatus("Waiting"); stamp("No source connected")
+	else
+		showEmpty("Prediction Unavailable", err, "error")
+		setStatus("Error"); stamp("Last try failed")
+	end
 end
 
-onGachaRollFinished = function(newCandidate)
-	if alive and state.enabled and newCandidate then
-		local data = buildFruitDataFromCandidate(newCandidate)
-		reveal(data)
-		setStatus("Detected", data.rarity)
+onGachaRollFinished = function(newCand)
+	if alive and state.enabled and newCand then
+		local spr = getFruitSprite(newCand.DisplayName)
+		local rName = (newCand.Rarity and newCand.Rarity.Name) or "Common"
+		reveal({
+			name = newCand.DisplayName,
+			rarity = rName,
+			icon = spr and spr.Image or FRUIT_ICONS[newCand.DisplayName],
+			source = "Dealer Gacha",
+		})
+		setStatus("Detected", rName)
 		stamp("Next roll ready")
 	end
 end
 
 ------------------------------------------------------------------------
--- TOGGLES & QUICK BAR INTERACTIONS
+-- TOGGLE
 ------------------------------------------------------------------------
 local function setEnabled(on)
 	state.enabled = on
@@ -1572,62 +1547,22 @@ local function setEnabled(on)
 		state.token += 1
 		state.busy, state.current = false, nil
 		setButtonLoading(false)
-		showEmpty("No Fruit Detected", "Turn on the predictor to see the next shop fruit.")
+		showEmpty("No Fruit Detected", "Turn on the predictor to scan.")
 		setStatus("Waiting"); stamp("No data yet")
 	end
 end
 
-local function toggleGachaFlag(key)
-	gachaFlags[key] = not gachaFlags[key]
-	local isOn = gachaFlags[key]
-	if quickButtonRefs[key] then
-		quickButtonRefs[key](isOn)
-	end
-
-	if key == "boostLuck" then
-		nextSelectedFruit = pickCandidateFruit(isOn)
-		if state.enabled and nextSelectedFruit then
-			local data = buildFruitDataFromCandidate(nextSelectedFruit)
-			reveal(data)
-			setStatus("Detected", data.rarity)
-			stamp(isOn and "Boost Luck ON" or "Normal Pool")
-		end
-	end
-end
-
-bind(BoostLuckBtn.Activated, function() toggleGachaFlag("boostLuck") end)
-bind(BypassTimeBtn.Activated, function() toggleGachaFlag("bypassTime") end)
-bind(BypassMoneyBtn.Activated, function() toggleGachaFlag("bypassCash") end)
-
-bind(DiscordBtn.Activated, function()
-	local copied = false
-	pcall(function()
-		if typeof(setclipboard) == "function" then
-			setclipboard(CONFIG.DiscordInvite)
-			copied = true
-		elseif typeof(toclipboard) == "function" then
-			toclipboard(CONFIG.DiscordInvite)
-			copied = true
-		end
-	end)
-	DiscordBtn.Text = copied and "Copied Link!" or "discord.gg/V7DYYebjHD"
-	tween(DiscordBtn, 0.2, { BackgroundColor3 = C.green })
-	task.delay(2, function()
-		if DiscordBtn and DiscordBtn.Parent then
-			DiscordBtn.Text = "Discord Server"
-			tween(DiscordBtn, 0.2, { BackgroundColor3 = C.discord })
-		end
-	end)
-end)
-
+------------------------------------------------------------------------
+-- INTERACTIONS
+------------------------------------------------------------------------
 bind(ToggleHit.Activated, function() setEnabled(not state.enabled) end)
 bind(ToggleHit.MouseEnter, function() tween(ToggleRow, 0.2, { BackgroundColor3 = Color3.fromRGB(36, 43, 68) }) end)
 bind(ToggleHit.MouseLeave, function() tween(ToggleRow, 0.2, { BackgroundColor3 = C.panel }) end)
 
-bind(RefreshBtn.MouseEnter, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -4) }) end)
-bind(RefreshBtn.MouseLeave, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -2) }) end)
+bind(RefreshBtn.MouseEnter, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -5) }) end)
+bind(RefreshBtn.MouseLeave, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -3) }) end)
 bind(RefreshBtn.MouseButton1Down, function() tween(RefreshBtn, 0.06, { Position = UDim2.fromOffset(0, 0) }) end)
-bind(RefreshBtn.MouseButton1Up, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -2) }, Enum.EasingStyle.Back) end)
+bind(RefreshBtn.MouseButton1Up, function() tween(RefreshBtn, 0.15, { Position = UDim2.fromOffset(0, -3) }, Enum.EasingStyle.Back) end)
 bind(RefreshBtn.Activated, function()
 	if not state.enabled then
 		toggleRowStroke.Color = C.cyan
@@ -1667,6 +1602,7 @@ if type(ENV) == "table" then
 end
 
 bind(CloseBtn.Activated, function()
+	fadeAll(snapshot(Holder), false, 0.22)
 	tween(mainScale, 0.25, { Scale = 0.9 })
 	task.delay(0.27, destroy)
 end)
@@ -1690,6 +1626,15 @@ bind(UIS.InputChanged, function(input)
 		Holder.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
 	end
 end)
+
+local function rescale()
+	local cam = workspace.CurrentCamera
+	if not cam then return end
+	local vp = cam.ViewportSize
+	rootScale.Scale = math.clamp(math.min(vp.X / (W + 80), vp.Y / (H + 80)), 0.7, 1)
+end
+rescale()
+if workspace.CurrentCamera then bind(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), rescale) end
 
 ------------------------------------------------------------------------
 -- BACKGROUND PRELOAD OF MYTHICAL FRUIT MODELS FROM INVENTORY
@@ -1785,6 +1730,7 @@ bind(RunService.Heartbeat, function(dt)
 	borderGrad.Rotation = (T * 55) % 360
 	local wave = math.sin(T * 1.4)
 	brandGrad.Offset = Vector2.new(wave * 0.35, 0)
+	footerGrad.Offset = Vector2.new(-wave * 0.35, 0)
 	if state.enabled then refreshGrad.Offset = Vector2.new(math.sin(T * 1.2) * 0.25, 0) end
 	headFruit.body.Rotation = math.sin(T * 2) * 8
 
@@ -1853,14 +1799,41 @@ bind(RunService.Heartbeat, function(dt)
 	end
 end)
 
+task.spawn(function()
+	local acc = 0
+	while alive do
+		task.wait(1)
+		if CONFIG.AutoRefreshSeconds > 0 and state.enabled and not state.busy then
+			acc += 1
+			if acc >= CONFIG.AutoRefreshSeconds then
+				acc = 0
+				local my = state.token
+				local res, err = fetchWithTimeout(CONFIG.RequestTimeout)
+				if alive and state.enabled and not state.busy and my == state.token then
+					if res then
+						local cur = state.current
+						if not cur or cur.name ~= res.name or cur.rarity ~= res.rarity then reveal(res) end
+						setStatus("Detected", res.rarity); stamp()
+					elseif err ~= "NO_SOURCE" and state.current then
+						stamp("Live update failed")
+					end
+				end
+			end
+		else
+			acc = 0
+		end
+	end
+end)
+
 ------------------------------------------------------------------------
 -- OPEN ANIMATION
 ------------------------------------------------------------------------
 nextSelectedFruit = pickCandidateFruit(false)
-showEmpty("No Fruit Detected", "Turn on the predictor to see the next shop fruit.")
+showEmpty("No Fruit Detected", "Turn on the predictor to scan.")
 setButtonEnabled(false)
 
-local stagger = { ToggleRow, QuickBar, StatusChip, UpdatedLbl, Card, BtnBase, FooterRow }
+fadeAll(snapshot(Holder), true, 0.45)
+local stagger = { ToggleRow, StatusChip, UpdatedLbl, Card, BtnBase, FooterBrand }
 for i, obj in ipairs(stagger) do
 	local target = obj.Position
 	obj.Position = target + UDim2.fromOffset(0, 12)
