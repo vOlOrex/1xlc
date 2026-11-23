@@ -1,8 +1,6 @@
 --[[
-    Fruit Spin Predictor  •  Blox Fruits UI  (Mobile & Cross-Executor Edition)
+    Fruit Spin Predictor  •  Blox Fruits UI  (Universal Compatibility Edition)
     Discord: https://discord.gg/V7DYYebjHD
-    ------------------------------------------------------------------
-    RightControl OR Floating Button hides / shows the window.
 ]]
 
 ------------------------------------------------------------------------
@@ -17,7 +15,7 @@ local CONFIG = {
 	RequestTimeout     = 10,
 	BrandName          = "FRUIT SPIN",
 	BrandTag           = "PREDICTOR",
-	Version            = "v2.7",
+	Version            = "v2.8",
 	ToggleKey          = Enum.KeyCode.RightControl,
 }
 
@@ -33,7 +31,7 @@ local FRUITS = {
 local ALIASES = { Chop = "Blade", Falcon = "Eagle", Barrier = "Creation", Rumble = "Lightning", Leopard = "Tiger" }
 
 ------------------------------------------------------------------------
--- SERVICES & SAFE MODULE LOADING (CROSS-EXECUTOR FIX)
+-- SERVICES & SAFE MODULE LOADING
 ------------------------------------------------------------------------
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local Players            = game:GetService("Players")
@@ -43,8 +41,12 @@ local UIS                = game:GetService("UserInputService")
 local HttpService        = game:GetService("HttpService")
 local CoreGui            = game:GetService("CoreGui")
 
-local LocalPlayer        = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() and Players.LocalPlayer
-local playerGui          = LocalPlayer:WaitForChild("PlayerGui", 15)
+local LocalPlayer        = Players.LocalPlayer
+while not LocalPlayer do
+	Players.PlayerAdded:Wait()
+	LocalPlayer = Players.LocalPlayer
+end
+local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 15)
 
 local function safeRequire(pathFn)
 	local ok, mod = pcall(pathFn)
@@ -731,22 +733,43 @@ local RARITY = {
 	Unknown   = { color = C.cyan,                         dark = Color3.fromRGB(0, 70, 95),    fx = 0 },
 }
 
-local F_TITLE = Enum.Font.FredokaOne
-local F_BOLD  = Enum.Font.GothamBold
-local F_REG   = Enum.Font.GothamMedium
+local function safeFont(fontName, fallback)
+	local ok, res = pcall(function() return Enum.Font[fontName] end)
+	return (ok and res) or fallback or Enum.Font.GothamBold
+end
+
+local F_TITLE = safeFont("FredokaOne", Enum.Font.GothamBlack)
+local F_BOLD  = safeFont("GothamBold", Enum.Font.SourceSansBold)
+local F_REG   = safeFont("GothamMedium", Enum.Font.SourceSans)
 
 ------------------------------------------------------------------------
 -- HELPERS
 ------------------------------------------------------------------------
 local alive, conns = true, {}
-local function bind(signal, fn) local c = signal:Connect(fn); table.insert(conns, c); return c end
+local function bind(signal, fn)
+	if not signal then return nil end
+	local ok, c = pcall(function() return signal:Connect(fn) end)
+	if ok and c then table.insert(conns, c) end
+	return c
+end
 
 local function new(class, props, children)
-	local o = Instance.new(class)
+	local ok, o = pcall(function() return Instance.new(class) end)
+	if not ok or not o then o = Instance.new("Frame") end
 	local parent
-	for k, v in pairs(props or {}) do if k == "Parent" then parent = v else o[k] = v end end
-	for _, ch in ipairs(children or {}) do ch.Parent = o end
-	if parent then o.Parent = parent end
+	for k, v in pairs(props or {}) do
+		if k == "Parent" then
+			parent = v
+		else
+			pcall(function() o[k] = v end)
+		end
+	end
+	for _, ch in ipairs(children or {}) do
+		pcall(function() ch.Parent = o end)
+	end
+	if parent then
+		pcall(function() o.Parent = parent end)
+	end
 	return o
 end
 local function corner(r) return new("UICorner", { CornerRadius = UDim.new(0, r) }) end
@@ -764,8 +787,17 @@ local function grad(colors, rot)
 	return new("UIGradient", { Color = ColorSequence.new(kp), Rotation = rot or 0 })
 end
 local function tween(o, t, props, style, dir)
-	local tw = TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
-	tw:Play(); return tw
+	local ok, tw = pcall(function()
+		return TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+	end)
+	if ok and tw then
+		pcall(function() tw:Play() end)
+		return tw
+	end
+	for k, v in pairs(props or {}) do
+		pcall(function() o[k] = v end)
+	end
+	return nil
 end
 local function label(props, children)
 	props.BackgroundTransparency = 1
@@ -782,7 +814,6 @@ local function fadeEdges(mid)
 	return NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, mid or 0), NumberSequenceKeypoint.new(1, 1) })
 end
 
--- Universal Dragging Function (Works cleanly on Mobile Touch & PC Mouse)
 local function makeDraggable(dragHandle, targetFrame)
 	local dragging, dragInput, dragStart, startPos
 	bind(dragHandle.InputBegan, function(input)
@@ -790,7 +821,7 @@ local function makeDraggable(dragHandle, targetFrame)
 			dragging = true
 			dragStart = input.Position
 			startPos = targetFrame.Position
-			input.Changed:Connect(function()
+			bind(input.Changed, function()
 				if input.UserInputState == Enum.UserInputState.End then
 					dragging = false
 				end
@@ -841,21 +872,34 @@ local function paintFruit(f, rarity)
 end
 
 ------------------------------------------------------------------------
--- SCREEN GUI (SAFE MULTI-EXECUTOR PARENTING)
+-- SCREEN GUI (UNIVERSAL EXECUTOR FALLBACKS)
 ------------------------------------------------------------------------
 local gui = new("ScreenGui", { Name = "FruitSpinPredictor", ResetOnSpawn = false, IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999999 })
 
 local function mountGui(targetGui)
-	local ok = false
+	local candidates = {}
 	if typeof(gethui) == "function" then
-		ok = pcall(function() targetGui.Parent = gethui() end)
+		local ok, h = pcall(gethui)
+		if ok and typeof(h) == "Instance" then table.insert(candidates, h) end
 	end
-	if (not ok or not targetGui.Parent) and CoreGui then
-		ok = pcall(function() targetGui.Parent = CoreGui end)
-	end
-	if (not ok or not targetGui.Parent) and playerGui then
-		targetGui.Parent = playerGui
+	if CoreGui then table.insert(candidates, CoreGui) end
+	if playerGui then table.insert(candidates, playerGui) end
+
+	for _, parentObj in ipairs(candidates) do
+		local ok = pcall(function()
+			targetGui.Parent = parentObj
+		end)
+		if ok and targetGui.Parent == parentObj then
+			local testOk = pcall(function()
+				local probe = Instance.new("Frame")
+				probe.Size = UDim2.fromOffset(1, 1)
+				probe.BackgroundTransparency = 1
+				probe.Parent = targetGui
+				probe:Destroy()
+			end)
+			if testOk then return end
+		end
 	end
 end
 mountGui(gui)
@@ -863,7 +907,6 @@ mountGui(gui)
 local W, H, HEADER = 276, 404, 42
 local CARD_W, CARD_H = W - 20, 174
 
--- Mobile / Quick Floating Toggle Button
 local FloatBtn = new("TextButton", {
 	Name = "MobileToggleBtn",
 	AnchorPoint = Vector2.new(0, 0.5),
@@ -937,7 +980,6 @@ frame({ Position = UDim2.new(0, 0, 0, HEADER - 2), Size = UDim2.new(1, 0, 0, 2),
 local Body = frame({ Name = "Body", Position = UDim2.fromOffset(0, HEADER), Size = UDim2.new(1, 0, 1, -HEADER),
 	BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = Main })
 
--- Toggle row
 local ToggleRow = frame({ Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 0, 36), BackgroundColor3 = C.panel,
 	ZIndex = 4, Parent = Body }, { corner(10) })
 local toggleRowStroke = stroke(C.line, 1.2, 0); toggleRowStroke.Parent = ToggleRow
@@ -953,7 +995,6 @@ local Knob = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 
 	BackgroundColor3 = Color3.fromRGB(185, 192, 212), ZIndex = 6, Parent = Switch }, { circle() })
 local ToggleHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 7, Parent = ToggleRow })
 
--- Quick Toggle Bar
 local QuickBar = frame({ Name = "QuickBar", Position = UDim2.fromOffset(10, 50), Size = UDim2.new(1, -20, 0, 34),
 	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
 new("UIListLayout", {
@@ -1012,7 +1053,6 @@ local BoostLuckBtn = makeQuickBtn("boostLuck", "Boost\nLuck", C.green)
 local BypassTimeBtn = makeQuickBtn("bypassTime", "Bypass\nTime", C.cyan)
 local BypassMoneyBtn = makeQuickBtn("bypassCash", "Bypass\nMoney", C.gold)
 
--- Status row
 local StatusChip = frame({ Position = UDim2.fromOffset(10, 92), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X,
 	BackgroundColor3 = C.gray, BackgroundTransparency = 0.82, ZIndex = 4, Parent = Body }, {
 	circle(), new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 10) }),
@@ -1025,7 +1065,6 @@ local StatusText = label({ Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.
 local UpdatedLbl = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 92), Size = UDim2.fromOffset(130, 20),
 	Text = "No data yet", TextSize = 9, TextColor3 = C.sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4, Parent = Body })
 
--- Preview card
 local Card = frame({ Name = "Card", Position = UDim2.fromOffset(10, 120), Size = UDim2.new(1, -20, 0, CARD_H),
 	BackgroundColor3 = C.white, ClipsDescendants = true, ZIndex = 4, Parent = Body },
 	{ corner(12), grad({ Color3.fromRGB(28, 36, 62), Color3.fromRGB(12, 16, 30), C.sea }, 90) })
@@ -1052,7 +1091,6 @@ local function view(name)
 end
 local EmptyView, ScanView, ReelView, ResultView = view("Empty"), view("Scan"), view("Reel"), view("Result")
 
--- Empty view
 local EmptyIcon = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 52), Size = UDim2.fromOffset(54, 54),
 	BackgroundColor3 = C.panel, ZIndex = 6, Parent = EmptyView }, { circle() })
 local emptyIconStroke = stroke(C.line, 2, 0); emptyIconStroke.Parent = EmptyIcon
@@ -1064,7 +1102,6 @@ local EmptySub = label({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new
 	Text = "Turn on the predictor to see the next shop fruit.", TextSize = 10, TextColor3 = C.sub, TextWrapped = true,
 	TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 6, Parent = EmptyView })
 
--- Scan view
 local Radar = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 62), Size = UDim2.fromOffset(84, 84),
 	BackgroundColor3 = C.cyan, BackgroundTransparency = 0.9, ZIndex = 6, Parent = ScanView }, { circle(), stroke(C.cyan, 1.5, 0.15) })
 frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(48, 48),
@@ -1085,7 +1122,6 @@ local ScanLine = frame({ Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.cyan
 frame({ AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = C.cyan, ZIndex = 7, Parent = ScanLine },
 	{ new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.8) }) })
 
--- Reel view
 label({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 16), Text = "SPINNING...", Font = F_TITLE,
 	TextSize = 14, TextColor3 = C.gold, ZIndex = 6, Parent = ReelView }, { textStroke(C.ink, 1.5) })
 local Slot = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 84), Size = UDim2.fromOffset(204, 74),
@@ -1105,7 +1141,6 @@ local reelFruitFallback = makeFruit(ReelIconBox, 36, 8, UDim2.new(0.5, 0, 0.5, 2
 local ReelName = label({ Position = UDim2.fromOffset(78, 0), Size = UDim2.new(1, -98, 1, 0), Text = "", Font = F_TITLE,
 	TextSize = 18, TextTruncate = Enum.TextTruncate.AtEnd, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8, Parent = Slot }, { textStroke(C.ink, 2) })
 
--- Result view
 local ICON_X, ICON_Y = CARD_W / 2, 62
 label({ Position = UDim2.fromOffset(0, 5), Size = UDim2.new(1, 0, 0, 12), Text = "NEXT SHOP FRUIT", Font = F_BOLD,
 	TextSize = 9, TextColor3 = C.sub, ZIndex = 6, Parent = ResultView })
@@ -1146,7 +1181,6 @@ local DetailLbl = label({ Position = UDim2.fromOffset(0, 153), Size = UDim2.new(
 local Shine = frame({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(-0.3, 0, 0.5, 0), Size = UDim2.new(0, 34, 1.6, 0),
 	Rotation = 18, BackgroundColor3 = C.white, ZIndex = 13, Parent = Card }, { new("UIGradient", { Transparency = fadeEdges(0.78) }) })
 
--- Refresh button
 local BtnBase = frame({ Position = UDim2.fromOffset(10, 302), Size = UDim2.new(1, -20, 0, 32), BackgroundColor3 = Color3.fromRGB(28, 30, 46),
 	ZIndex = 4, Parent = Body }, { corner(10) })
 local RefreshBtn = new("TextButton", { Position = UDim2.fromOffset(0, -2), Size = UDim2.fromScale(1, 1), AutoButtonColor = false,
@@ -1162,7 +1196,6 @@ local Spinner = frame({ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(
 local spinStroke = stroke(C.white, 2.2, 0); spinStroke.Parent = Spinner
 new("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = spinStroke })
 
--- Footer + Discord Server Copy Button
 local FooterRow = frame({ Name = "FooterRow", Position = UDim2.fromOffset(10, 338), Size = UDim2.new(1, -20, 0, 20),
 	BackgroundTransparency = 1, ZIndex = 4, Parent = Body })
 
@@ -1638,9 +1671,9 @@ end)
 local function destroy()
 	if not alive then return end
 	alive = false
-	for _, c in ipairs(conns) do c:Disconnect() end
+	for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
 	if ENV.__FruitSpinPredictorDestroy == destroy then ENV.__FruitSpinPredictorDestroy = nil end
-	gui:Destroy()
+	pcall(function() gui:Destroy() end)
 end
 ENV.__FruitSpinPredictorDestroy = destroy
 
@@ -1650,7 +1683,6 @@ bind(CloseBtn.Activated, function()
 	task.delay(0.27, destroy)
 end)
 
--- Toggle Window via Keyboard OR Floating Button
 bind(FloatBtn.Activated, function()
 	Holder.Visible = not Holder.Visible
 end)
@@ -1661,10 +1693,8 @@ bind(UIS.InputBegan, function(input, gp)
 	end
 end)
 
--- Enable Touch & Mouse Dragging on Header
 makeDraggable(Header, Holder)
 
--- Mobile-Friendly Responsive Scaling
 local function rescale()
 	local cam = workspace.CurrentCamera
 	if not cam then return end
@@ -1760,6 +1790,7 @@ end)
 ------------------------------------------------------------------------
 local T, partAcc, starAcc, boltAcc, shineAcc, waveAcc = 0, 0, 0, 0, 0, 0
 bind(RunService.Heartbeat, function(dt)
+	if not alive then return end
 	T += dt
 	borderGrad.Rotation = (T * 55) % 360
 	floatGrad.Rotation = (T * 75) % 360
