@@ -90,7 +90,7 @@ local function fn12()
 	return result3 or {}
 end
 
-local tbl2 = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false }
+local tbl2 = { boostLuck = false, bypassTime = false, bypassCash = false, realMode = false, invMode = false }
 
 local function fn13()
 	return HttpService:GenerateGUID(false)
@@ -439,19 +439,42 @@ local function fn18(arg)
 	end)
 end
 
+local function getInvFruitsPool()
+	local inv = fn12()
+	local pool = {}
+	for _, item in ipairs(inv) do
+		if item.Type == "Blox Fruit" then
+			for _, f in ipairs(tbl6) do
+				if f.StorageName == item.Name or f.DisplayName == item.DisplayName then
+					table.insert(pool, f)
+					break
+				end
+			end
+		end
+	end
+	return pool
+end
+
 local function fn19(arg, arg2)
-	local v5 = arg and tbl9 or tbl8
+	local v5
+	if tbl2.invMode then
+		local invPool = getInvFruitsPool()
+		if #invPool > 0 then
+			v5 = invPool
+		end
+	end
+	if not v5 then
+		v5 = (arg and #tbl9 > 0) and tbl9 or tbl8
+	end
 	local v6 = v5[math.random(1, #v5)]
 
 	task.spawn(function()
-		-- التعديل الجديد: سيبنا اللفة تبدأ فوراً في الخلفية
 		local ok4, result4 = pcall(function()
 			require(ReplicatedStorage.Controllers.UI.Spinner):Open({ v6 }, tbl6, "ZiolesGacha")
 		end)
 		if not ok4 then warn("[X10Lucky] Spinner:Open failed:", result4) end
 
-		-- وفي نفس الوقت بنجيب الفاكهة الحقيقية في الخلفية
-		if arg and tbl2.realMode then
+		if (arg or tbl2.invMode) and tbl2.realMode then
 			local storageName = v6.StorageName
 			local primeExists = getPrimeTool(storageName) ~= nil
 			
@@ -493,8 +516,7 @@ local function fn19(arg, arg2)
 				end
 			end
 		else
-			-- الوضع العادي (Fake)
-			if arg and tbl10[v6.StorageName] then
+			if (arg or tbl2.invMode) and tbl10[v6.StorageName] then
 				local storageName = v6.StorageName
 				local v7 = tbl11[storageName]
 				if v7 then
@@ -654,7 +676,7 @@ GachaWindow.Open = function(arg, arg2, arg3, ...)
 	if arg2 == "ZiolesGacha" then
 		fn27()
 		flag4 = false
-		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime then
+		if tbl2.boostLuck or tbl2.bypassCash or tbl2.bypassTime or tbl2.invMode then
 			n2 = type(arg3) == "table" and tonumber(arg3.Value) or 0
 			flag4 = true
 			text = tbl2.bypassCash and "FREE" or nil
@@ -701,8 +723,8 @@ screenGui.IgnoreGuiInset = true
 screenGui.Enabled = false
 screenGui.Parent = playerGui
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 230, 0, 240)
-frame.Position = UDim2.new(0, 10, 0.5, -120)
+frame.Size = UDim2.new(0, 230, 0, 286)
+frame.Position = UDim2.new(0, 10, 0.5, -143)
 frame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
@@ -750,8 +772,9 @@ local tbl16 = { key = "boostLuck", label = "🍀 Boost Luck", color = Color3.fro
 local tbl17 = { key = "bypassTime", label = "⏰ Bypass Waiting Time", color = Color3.fromRGB(80, 160, 255) }
 local tbl18 = { key = "bypassCash", label = "💰 Bypass Cash", color = Color3.fromRGB(255, 200, 50) }
 local tbl19_real = { key = "realMode", label = "🎁 Real Fruits Mode", color = Color3.fromRGB(255, 100, 100) }
+local tbl20_inv = { key = "invMode", label = "🎒 Inv Fruits Mode", color = Color3.fromRGB(165, 95, 255) }
 
-tbl15[1] = tbl16; tbl15[2] = tbl17; tbl15[3] = tbl18; tbl15[4] = tbl19_real
+tbl15[1] = tbl16; tbl15[2] = tbl17; tbl15[3] = tbl18; tbl15[4] = tbl19_real; tbl15[5] = tbl20_inv
 
 local frame3 = Instance.new("Frame")
 frame3.Size = UDim2.new(1, -20, 1, -48)
